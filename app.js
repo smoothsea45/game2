@@ -41,6 +41,7 @@ const portrait = {master:'head',apprentice:'apprentice',porter:'porter',rival:'r
 for(const [id,person] of Object.entries(people)){
   const b=document.createElement('button');b.type='button';b.className='person';b.dataset.person=id;
   b.title=person.name+' · '+person.role;b.setAttribute('aria-label',b.title+' 선택');
+  if(landscape.matches)b.setAttribute('aria-expanded','false');
   const img=document.createElement('img');img.src='./portraits/'+portrait[id]+'.webp';img.alt='';img.draggable=false;
   const label=document.createElement('span');label.textContent=person.role;
   b.append(img,label);b.onclick=()=>selectPerson(id);b.setAttribute('aria-controls','command-card');
@@ -75,7 +76,9 @@ function issue(id,target){
 }
 function dismissCard(){
   card.classList.remove('open');
-  for(const button of Object.values(rosterNodes))button.setAttribute('aria-expanded','false');
+  for(const button of Object.values(rosterNodes)){
+    if(landscape.matches)button.setAttribute('aria-expanded','false');else button.removeAttribute('aria-expanded');
+  }
 }
 function setCameraMenu(open){
   el('camera-tools').classList.toggle('open',open);
@@ -92,7 +95,7 @@ function selectPerson(id){
   if(following)following=id;
   dismissBook();setCameraMenu(false);
   if(landscape.matches){
-    if(visual&&!visual.projectActor(id))following=id;
+    if(visual?.projectActor&&!visual.projectActor(id))following=id;
     card.classList.add('open');
     for(const [key,b] of Object.entries(rosterNodes))b.setAttribute('aria-expanded',String(id===key));
   }
@@ -101,7 +104,7 @@ function selectPerson(id){
 // Put the arrow beside the actor's projected head. The map and floating layers share viewport coordinates.
 function positionCard(){
   if(!landscape.matches||!card.classList.contains('open'))return;
-  const sceneBox=el('scene').getBoundingClientRect(),head=visual?.projectActor(selected);
+  const sceneBox=el('scene').getBoundingClientRect(),head=visual?.projectActor?.(selected);
   const hud=document.querySelector('.masthead').getBoundingClientRect();
   const party=el('roster').getBoundingClientRect();
   const minX=hud.left,maxX=Math.max(minX,hud.right-card.offsetWidth);
