@@ -139,7 +139,11 @@ function renderHUD(){
   el('goal-text').textContent=goal;
   [...el('goal-track').children].forEach((v,i)=>v.classList.toggle('done',i<completed));
   for(const [key] of resources)resourceValues[key].nodeValue=String(key==='price'?price(game):game[key]);
-  for(const [key,b] of Object.entries(rosterNodes))b.setAttribute('aria-pressed',String(key===selected));
+  for(const [key,b] of Object.entries(rosterNodes)){
+    const person=actor(key);
+    b.setAttribute('aria-pressed',String(key===selected));
+    b.dataset.mode=person.mode;b.title=people[key].name+' · '+people[key].role+' · '+person.action;
+  }
   el('actor-role').textContent=people[selected].role;el('actor-name').textContent=people[selected].name;
   el('actor-status').textContent=(a.at?places[a.at].name+' · ':'')+a.action+(a.cargo?' · 등짐 '+a.cargo+'장':'')+(a.mode==='work'?' · '+Math.ceil(a.remaining)+'초':'');
   el('work-meter').hidden=a.mode!=='work'||!a.duration;
@@ -232,7 +236,7 @@ function makeRoadMap(mount){
 renderHUD();persist();
 try {
   const {createScene}=await import('./scene.js');
-  visual=createScene(el('scene'),{onPick:pick,onPan:()=>{following=null;renderHUD();}});
+  visual=createScene(el('scene'),{onPick:pick,onPan:()=>{if(following){following=null;renderHUD();}}});
 } catch(err) {
   console.warn('3D 장면 초기화 실패',err);
   visual=makeRoadMap(el('scene'));
