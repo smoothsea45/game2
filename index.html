@@ -9,7 +9,7 @@
 </head>
 <body>
 <header class="masthead">
-  <div class="brand"><span class="seal" aria-hidden="true">漢城<br>家錄</span><h1>한성가록</h1></div>
+  <div class="brand"><span class="seal" aria-hidden="true">漢城<br>家錄</span><div><h1>한성가록</h1><p class="brand-place">한성부 · 운종가</p></div></div>
   <div class="timebar">
     <div class="calendar"><span>선조 33년</span><b id="day">첫째 날</b></div>
     <div class="hour"><span data-icon="sun"></span><strong id="time">07:00</strong></div>
@@ -27,7 +27,7 @@
         <div id="scene" aria-label="한성의 거리와 인물"></div>
         <div class="map-plate"><span class="map-region">漢城府</span><strong>운종가</strong></div>
         <div id="pause-badge" hidden>시간이 멈췄습니다</div>
-        <div class="camera" aria-label="지도 보기 조정">
+        <div class="camera" id="camera-tools" aria-label="지도 보기 조정">
           <button type="button" data-camera="reset" title="지도 전체 보기" aria-label="지도 전체 보기"><span data-icon="frame"></span></button>
           <button type="button" data-camera="left" title="왼쪽으로 회전" aria-label="왼쪽으로 회전"><span data-icon="rotateLeft"></span></button>
           <button type="button" data-camera="right" title="오른쪽으로 회전" aria-label="오른쪽으로 회전"><span data-icon="rotateRight"></span></button>
@@ -48,15 +48,22 @@
         <h2 class="section-title">인물 선택</h2>
         <div id="roster" aria-label="인물 선택"></div>
       </section>
-      <section class="command">
-        <div class="identity"><div><span class="person-role" id="actor-role"></span><h2 id="actor-name"></h2></div><button id="follow" type="button" class="track-button" aria-pressed="false"><span data-icon="target"></span> 따라가기</button></div>
+      <section class="command" id="command-card" aria-labelledby="actor-name"><div class="command-body">
+        <div class="identity"><img id="active-portrait" alt=""><div><span class="person-role" id="actor-role"></span><h2 id="actor-name"></h2></div><button id="follow" type="button" class="track-button" aria-pressed="false"><span data-icon="target"></span> 따라가기</button><button type="button" id="command-close" aria-label="인물 명령 닫기"><span data-icon="close"></span></button></div>
         <div id="state-line"><span class="status-dot"></span><span id="actor-status"></span></div>
         <div class="work-meter" id="work-meter" hidden><i></i></div>
         <div class="action-list" id="actions"></div>
         <div id="travel"><label for="destination">이동 지시</label><div><select id="destination"></select><button id="go" type="button">보내기 <span aria-hidden="true">→</span></button></div></div>
-      </section>
+      </div></section>
     </aside>
   </div>
+  <nav class="pocket-bar" aria-label="지도 도구">
+    <button type="button" data-pocket="goal" aria-label="목표 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="flag"></span><span>목표</span></button>
+    <button type="button" data-pocket="stock" aria-label="재고 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="stall"></span><span>재고</span></button>
+    <button type="button" data-pocket="log" aria-label="일지 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="feather"></span><span>일지</span></button>
+    <button type="button" id="camera-open" aria-label="시점 조절" aria-expanded="false" aria-controls="camera-tools"><span data-icon="frame"></span><span>시점</span></button>
+    <button type="button" data-pocket="help" aria-label="도움말 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="book"></span><span>도움</span></button>
+  </nav>
   <div class="footnote"><span><span data-icon="pointer"></span> <span id="map-hint">인물을 선택하고 길이나 건물을 눌러 이동하세요.</span></span><span id="save-state"></span></div>
 </main>
 <dialog id="book-dialog" aria-labelledby="dialog-title"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" id="close" aria-label="닫기"><span data-icon="close"></span></button></div><div id="dialog-content"></div></dialog>

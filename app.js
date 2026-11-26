@@ -1,4 +1,5 @@
-import {places, people, roads, fresh, tick, command, options, price, clock, loadGame} from './simulation.mjs';
+import {makeRoadMap} from './road-map.js';
+import {places, people, fresh, tick, command, options, price, clock, loadGame} from './simulation.mjs';
 
 const el = id => document.getElementById(id);
 const glyphs = {
@@ -30,6 +31,10 @@ let game;
 try {game=loadGame(localStorage.getItem(saveKey));} catch {}
 game ||= fresh();
 let selected='apprentice', following=null, lastSpeed=game.speed||1, visual, toastTimer;
+const landscape=matchMedia('(orientation: landscape)');
+const card=el('command-card'),dialog=el('book-dialog');
+const pocketButtons=[...document.querySelectorAll('[data-pocket]')];
+let openPocket=null,pocketSignature='',portraitId=null;
 const actor = id => game.agents.find(a => a.id===id);
 const rosterNodes = {}, resourceValues = {}, actionNodes = new Map();
 const portrait = {master:'head',apprentice:'apprentice',porter:'porter',rival:'rival'};
@@ -38,7 +43,7 @@ for(const [id,person] of Object.entries(people)){
   b.title=person.name+' · '+person.role;b.setAttribute('aria-label',b.title+' 선택');
   const img=document.createElement('img');img.src='./portraits/'+portrait[id]+'.webp';img.alt='';img.draggable=false;
   const label=document.createElement('span');label.textContent=person.role;
-  b.append(img,label);b.onclick=()=>selectPerson(id);
+  b.append(img,label);b.onclick=()=>selectPerson(id);b.setAttribute('aria-controls','command-card');
   el('roster').append(b);rosterNodes[id]=b;
 }
 const resources=[
@@ -65,22 +70,70 @@ function persist(){
 function issue(id,target){
   const result=command(game,selected,id,target);
   notify(people[selected].name+' · '+result.message,!result.ok);
-  if(result.ok)persist();renderHUD();
+  if(result.ok){persist();dismissCard();}
+  renderHUD();
+}
+function dismissCard(){
+  card.classList.remove('open');
+  for(const button of Object.values(rosterNodes))button.setAttribute('aria-expanded','false');
+}
+function setCameraMenu(open){
+  el('camera-tools').classList.toggle('open',open);
+  el('camera-open').setAttribute('aria-expanded',String(open));
+}
+function dismissBook(){
+  if(dialog.open)dialog.close();
+  openPocket=null;pocketSignature='';
+  for(const button of pocketButtons)button.setAttribute('aria-expanded','false');
 }
 function selectPerson(id){
   if(!Object.hasOwn(people,id))return;
   selected=id;
   if(following)following=id;
-  renderHUD();
+  dismissBook();setCameraMenu(false);
+  if(landscape.matches){
+    if(visual&&!visual.projectActor(id))following=id;
+    card.classList.add('open');
+    for(const [key,b] of Object.entries(rosterNodes))b.setAttribute('aria-expanded',String(id===key));
+  }
+  renderHUD();positionCard();
 }
+// Put the arrow beside the actor's projected head. The map and floating layers share viewport coordinates.
+function positionCard(){
+  if(!landscape.matches||!card.classList.contains('open'))return;
+  const sceneBox=el('scene').getBoundingClientRect(),head=visual?.projectActor(selected);
+  const hud=document.querySelector('.masthead').getBoundingClientRect();
+  const party=el('roster').getBoundingClientRect();
+  const minX=hud.left,maxX=Math.max(minX,hud.right-card.offsetWidth);
+  const minY=hud.bottom+5,maxY=Math.max(minY,party.top-card.offsetHeight-9);
+  const headX=sceneBox.left+(head?.x??sceneBox.width/2),headY=sceneBox.top+(head?.y??sceneBox.height/2);
+  const toRight=headX+card.offsetWidth+16<=hud.right||headX<sceneBox.width/2;
+  const wantedX=toRight?headX+15:headX-card.offsetWidth-15;
+  const clampedX=Math.min(maxX,Math.max(minX,wantedX)),clampedY=Math.min(maxY,Math.max(minY,headY-card.offsetHeight*.35));
+  card.style.transform='translate('+Math.round(clampedX)+'px,'+Math.round(clampedY)+'px)';
+  card.style.setProperty('--arrow-y',Math.min(card.offsetHeight-9,Math.max(9,headY-clampedY))+'px');
+  card.dataset.side=toRight?'right':'left';
+  card.dataset.detached=String(!head||Math.abs(clampedX-wantedX)>25);
+}
+el('command-close').onclick=()=>{dismissCard();rosterNodes[selected].focus({preventScroll:true});};
+el('camera-open').onclick=()=>{
+  const open=el('camera-open').getAttribute('aria-expanded')!=='true';
+  dismissCard();dismissBook();setCameraMenu(open);
+};
 function pick(hit,button){
   if(!hit)return;
+  if(landscape.matches&&openPocket){dismissBook();if(hit.type!=='actor')return;}
+  setCameraMenu(false);
   if(hit.type==='actor'&&button!==2){selectPerson(hit.id);return;}
   if(hit.type==='place')issue('move',hit.id);
   else if(Number.isFinite(hit.x)&&Number.isFinite(hit.z))issue('move',{x:hit.x,z:hit.z});
 }
 el('go').onclick=()=>issue('move',el('destination').value);
-el('follow').onclick=()=>{following=following===selected?null:selected;renderHUD();};
+el('follow').onclick=()=>{
+  following=following===selected?null:selected;
+  if(landscape.matches){dismissCard();notify(following?people[selected].name+' 따라가기':'인물 따라가기 해제');}
+  renderHUD();
+};
 function setSpeed(n){
   if(n>0)lastSpeed=n;
   game.speed=n;renderHUD();persist();
@@ -144,6 +197,7 @@ function renderHUD(){
     b.setAttribute('aria-pressed',String(key===selected));
     b.dataset.mode=person.mode;b.title=people[key].name+' · '+people[key].role+' · '+person.action;
   }
+  if(portraitId!==selected){el('active-portrait').src='./portraits/'+portrait[selected]+'.webp';portraitId=selected;}
   el('actor-role').textContent=people[selected].role;el('actor-name').textContent=people[selected].name;
   el('actor-status').textContent=(a.at?places[a.at].name+' · ':'')+a.action+(a.cargo?' · 등짐 '+a.cargo+'장':'')+(a.mode==='work'?' · '+Math.ceil(a.remaining)+'초':'');
   el('work-meter').hidden=a.mode!=='work'||!a.duration;
@@ -156,10 +210,32 @@ function renderHUD(){
     el('news-time').textContent=clock({time:game.log[0].time}).text;
     el('news-text').textContent=game.log[0].text;
   }
+  if(openPocket&&openPocket!=='help')renderPocket();
 }
-function openBook(which){
-  const content=el('dialog-content');content.replaceChildren();
-  if(which==='help'){
+function renderPocket(){
+  const which=openPocket,content=el('dialog-content');
+  const amounts=resources.map(([key])=>key==='price'?price(game):game[key]);
+  const firstLog=game.log[0];
+  const signatures={stock:amounts.join(','),goal:el('goal-text').textContent,log:firstLog?.time+'|'+firstLog?.text,help:'help'};
+  const signature=which+'|'+signatures[which];
+  if(signature===pocketSignature)return;
+  pocketSignature=signature;
+  content.replaceChildren();
+  if(which==='stock'){
+    el('dialog-title').textContent='가문 재고';
+    resources.forEach(([,name,unit,image],i)=>{
+      const row=document.createElement('div'),label=document.createElement('span'),qty=document.createElement('b');
+      row.className='stock-line';label.append(icon(image),document.createTextNode(name));qty.textContent=amounts[i]+' '+unit;
+      row.append(label,qty);content.append(row);
+    });
+  }else if(which==='goal'){
+    el('dialog-title').textContent='첫 거래';
+    const list=document.createElement('ol');list.className='goal-list';
+    for(const [name,done] of [['도제와 한지 4장 뜨기',game.crafted>0],['짐꾼으로 시전까지 운송',game.delivered>0],['가주가 시전에서 한지 팔기',game.sold>0]]){
+      const li=document.createElement('li');li.classList.toggle('done',done);li.textContent=name+(done?' · 완료':'');list.append(li);
+    }
+    const next=document.createElement('p');next.className='pocket-note';next.textContent=el('goal-text').textContent;content.append(list,next);
+  }else if(which==='help'){
     el('dialog-title').textContent='운종가에서의 하루';
     for(const text of [
       '1600년 한성. 종로 지물전에서 가족과 일꾼을 지휘해 첫 한 짐을 팔아 보세요.',
@@ -176,62 +252,32 @@ function openBook(which){
       stamp.textContent=t.day+'일 '+t.text;li.append(stamp,document.createTextNode(entry.text));list.append(li);
     }content.append(list);
   }
-  el('book-dialog').showModal();
 }
-el('help').onclick=()=>openBook('help');el('journal-open').onclick=()=>openBook('log');el('close').onclick=()=>el('book-dialog').close();
+function openBook(which){
+  if(which===openPocket&&dialog.open){dismissBook();return;}
+  dismissCard();setCameraMenu(false);openPocket=which;pocketSignature='';
+  renderPocket();
+  for(const b of pocketButtons)b.setAttribute('aria-expanded',String(b.dataset.pocket===which));
+  if(!dialog.open){if(landscape.matches)dialog.show();else dialog.showModal();}
+}
+pocketButtons.forEach(b=>b.onclick=()=>openBook(b.dataset.pocket));
+el('help').onclick=()=>openBook('help');el('journal-open').onclick=()=>openBook('log');el('close').onclick=dismissBook;
+dialog.addEventListener('close',()=>{if(!dialog.open)dismissBook();});
+landscape.addEventListener('change',()=>{
+  dismissBook();dismissCard();setCameraMenu(false);
+  card.style.removeProperty('transform');
+});
 el('book-dialog').onclick=e=>{if(e.target===el('book-dialog')){
   const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();
 }};
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&(card.classList.contains('open')||dialog.open||el('camera-tools').classList.contains('open'))){
+    e.preventDefault();dismissCard();dismissBook();setCameraMenu(false);return;
+  }
   if(e.defaultPrevented||e.altKey||e.metaKey||e.ctrlKey||el('book-dialog').open||e.target.matches('input,select,textarea'))return;
   if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();if(!e.repeat)setSpeed(game.speed?0:lastSpeed);}
   const key=Number(e.key);if(key>=1&&key<=4)selectPerson(Object.keys(people)[key-1]);
 });
-
-// The road diagram still accepts orders on devices without a working WebGL context.
-function makeRoadMap(mount){
-  mount.replaceChildren();
-  const canvas=document.createElement('canvas');mount.append(canvas);
-  const ctx=canvas.getContext('2d');
-  if(!ctx)return {render(){},zoom(){},rotate(){},reset(){}};
-  let angle=0,magnification=1,focus={x:0,z:0},hitBoxes=[],transform;
-  const colors={master:'#315c4c',apprentice:'#ad6147',porter:'#606a8b',rival:'#825747'};
-  function render({actors,selectedId,followId}){
-    const w=mount.clientWidth,h=mount.clientHeight,ratio=Math.min(devicePixelRatio||1,2);
-    if(!w||!h)return;
-    if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
-    const tracked=actors.find(a=>a.id===followId);if(tracked)focus={x:tracked.x,z:tracked.z};
-    const scale=Math.min(w/57,h/36)*magnification;
-    const cx=Math.cos(angle),sx=Math.sin(angle);
-    transform={scale,cx,sx,w,h};
-    const project=p=>({x:w/2+((p.x-focus.x)*cx-(p.z-focus.z)*sx)*scale,y:h/2+((p.x-focus.x)*sx+(p.z-focus.z)*cx)*scale});
-    ctx.setTransform(ratio,0,0,ratio,0,0);ctx.fillStyle='#d8d6b7';ctx.fillRect(0,0,w,h);
-    ctx.strokeStyle='#f6e8c7';ctx.lineWidth=Math.max(4,scale*1.2);ctx.lineCap='round';
-    for(const [from,to] of roads){const a=project(from),b=project(to);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
-    hitBoxes=[];
-    for(const [id,p] of Object.entries(places)){
-      const pos=project(p),dir=p.z<0?-1:1,cy=pos.y+dir*25;
-      ctx.font='bold 12px serif';const width=ctx.measureText(p.name).width+14;
-      ctx.fillStyle='#f8f2de';ctx.fillRect(pos.x-width/2,cy-10,width,20);ctx.strokeStyle='#676f58';ctx.lineWidth=1;ctx.strokeRect(pos.x-width/2,cy-10,width,20);
-      ctx.fillStyle='#2d4235';ctx.textAlign='center';ctx.fillText(p.name,pos.x,cy+4);
-      hitBoxes.push({type:'place',id,x:p.x,z:p.z,left:pos.x-width/2,right:pos.x+width/2,top:cy-12,bottom:cy+12});
-    }
-    for(const a of actors){
-      const p=project(a);ctx.beginPath();ctx.arc(p.x,p.y,a.id===selectedId?8:6,0,2*Math.PI);ctx.fillStyle=colors[a.id];ctx.fill();
-      ctx.lineWidth=a.id===selectedId?3:1;ctx.strokeStyle=a.id===selectedId?'#ffdda1':'#fff9e3';ctx.stroke();
-      hitBoxes.push({type:'actor',id:a.id,x:a.x,z:a.z,left:p.x-8,right:p.x+8,top:p.y-8,bottom:p.y+8});
-    }
-  }
-  function canvasPick(e){
-    if(!transform)return;const box=canvas.getBoundingClientRect(),x=e.clientX-box.left,y=e.clientY-box.top;
-    const hit=hitBoxes.slice().reverse().find(item=>x>=item.left&&x<=item.right&&y>=item.top&&y<=item.bottom);
-    if(hit){pick(hit,e.button);return;}
-    const {w,h,cx,sx,scale}=transform,dx=(x-w/2)/scale,dy=(y-h/2)/scale;
-    pick({type:'ground',x:focus.x+cx*dx+sx*dy,z:focus.z-sx*dx+cx*dy},e.button);
-  }
-  canvas.onclick=canvasPick;canvas.oncontextmenu=e=>{e.preventDefault();canvasPick(e);};
-  return {render,rotate(n){angle+=n;},zoom(n){magnification=Math.min(2.5,Math.max(.6,magnification*n));},reset(){focus={x:0,z:0};angle=0;magnification=1;}};
-}
 
 renderHUD();persist();
 try {
@@ -239,16 +285,20 @@ try {
   visual=createScene(el('scene'),{onPick:pick,onPan:()=>{if(following){following=null;renderHUD();}}});
 } catch(err) {
   console.warn('3D 장면 초기화 실패',err);
-  visual=makeRoadMap(el('scene'));
+  visual=makeRoadMap(el('scene'),pick);
   el('map-hint').textContent='이 기기에서는 평면 지도로 표시합니다. 인물을 선택하고 목적지를 눌러 주세요.';
   notify('3D 화면을 열 수 없어 평면 지도로 시작합니다.');
+}
+if(landscape.matches&&game.crafted===0&&game.time<8&&el('toast').hidden){
+  notify('도제 분이의 초상화를 눌러 한지 뜨기를 지시하세요.');
 }
 let previous=0,lastHUD=0,lastSave=0;
 function frame(now){
   if(!document.hidden){
     const dt=previous?Math.min((now-previous)/1000,.25):0;
     tick(game,dt*game.speed);
-    visual.render({actors:game.agents,selectedId:selected,followId:following,seconds:game.time,paused:!game.speed});
+    visual.render({actors:game.agents,selectedId:selected,followId:following,seconds:game.time,paused:!game.speed,hideActorLabel:landscape.matches&&card.classList.contains('open')});
+    positionCard();
     if(now-lastHUD>200){renderHUD();lastHUD=now;}
     if(now-lastSave>3500){persist();lastSave=now;}
   }

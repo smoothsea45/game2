@@ -68,13 +68,15 @@ export function createScene(container,{onPick,onPan}={}) {
   const rayBoxes=Object.entries(roofs).map(([id,{x,z,w,d}])=>[id,new T.Box3(
     new T.Vector3(x-w/2,0,z-d/2),new T.Vector3(x+w/2,3.8,z+d/2))]);
   let width=1,height=1,zoomLevel=1,angle=.30,frustum=35,currentActors=[],selected=null;
+  let hideActorLabel=false;
   let inertialFrame=false;
   function updateCamera(){
     const aspect=width/height;
     // Fit all four properties, while keeping narrower phone screens useful for close-ups.
-    frustum=Math.max(25,54/aspect)/zoomLevel;
+    frustum=Math.max(23,52/aspect)/zoomLevel;
     camera.left=-frustum*aspect/2;camera.right=-camera.left;
-    camera.top=frustum/2;camera.bottom=-camera.top;
+    // Show the rooftops beyond the main street while keeping characters in the central play area.
+    camera.top=frustum*.53;camera.bottom=-frustum*.47;
     camera.position.set(target.x+Math.sin(angle)*Math.cos(elevation)*92,
       Math.sin(elevation)*92,target.z+Math.cos(angle)*Math.cos(elevation)*92);
     camera.lookAt(target);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
@@ -87,6 +89,13 @@ export function createScene(container,{onPick,onPan}={}) {
   function projected(x,y,z){
     screen.set(x,y,z).project(camera);
     return {x:(screen.x+1)*width/2,y:(1-screen.y)*height/2};
+  }
+  function projectActor(id) {
+    const actor=currentActors.find(a=>a.id===id);
+    if(!actor||!Number.isFinite(actor.x)||!Number.isFinite(actor.z))return null;
+    const head=projected(actor.x,2.05,actor.z);
+    if(screen.z < -1 || screen.z > 1 || head.x<0 || head.x>width || head.y<0 || head.y>height)return null;
+    return head;
   }
   function overlaps(a,b) {
     return Math.abs(a.x-b.x)<(a.w+b.w)*.5+3 && Math.abs(a.y-b.y)<(a.h+b.h)*.5+2;
@@ -105,13 +114,18 @@ export function createScene(container,{onPick,onPan}={}) {
     if(selectedTag)node.style.zIndex='1';
   }
   function positionLabels(){
-    const occupied=[];
+    const occupied=currentActors.map(a=>{
+      const head=projected(a.x,1.95,a.z),foot=projected(a.x,.05,a.z);
+      return {x:head.x,y:(head.y+foot.y)/2,w:10,h:Math.abs(foot.y-head.y)};
+    });
     const active=currentActors.find(a=>a.id===selected);
-    if(active) {
+    if(active&&!hideActorLabel) {
       activeLabel.textContent=people[active.id]?.name??'';
       positionLabel(activeLabel,projected(active.x,2.42,active.z),51,occupied,true);
     }else activeLabel.style.visibility='hidden';
     for(const [id,{node}] of Object.entries(signs)){
+      // At phone overview scale, leave the rival roof pickable without its extra placard.
+      if(id==='rival'&&height<520&&zoomLevel<1.18){node.style.visibility='hidden';continue;}
       const {x,z}=roofs[id];
       positionLabel(node,projected(x,4.25,z),places[id].name.length*11+14,occupied,false);
     }
@@ -189,8 +203,8 @@ export function createScene(container,{onPick,onPan}={}) {
   canvas.addEventListener('pointercancel',e=>release(e,false));
   canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(-Math.sign(e.deltaY)*.13));},{passive:false});
   let lastLight=-20,lastUpdate=0;
-  function render({actors,selectedId,followId,seconds=0}){
-    currentActors=actors;selected=selectedId;
+  function render({actors,selectedId,followId,seconds=0,hideActorLabel:hideLabel=false}){
+    currentActors=actors;selected=selectedId;hideActorLabel=hideLabel;
     for(const a of actors)peopleModels.get(a.id)?.animate(a,seconds,a.id===selectedId);
     const active=actors.find(a=>a.id===selectedId),follow=actors.find(a=>a.id===followId);
     const now=performance.now(),dt=Math.min(.15,(now-lastUpdate)/1000);lastUpdate=now;
@@ -215,6 +229,6 @@ export function createScene(container,{onPick,onPan}={}) {
     }
     positionLabels();renderer.render(scene,camera);
   }
-  return {render,rotate,zoom,reset(){target.set(0,0,-.5);angle=.30;zoomLevel=1;updateCamera();},
+  return {render,rotate,zoom,projectActor,reset(){target.set(0,0,-.5);angle=.30;zoomLevel=1;updateCamera();},
     dispose(){observer.disconnect();renderer.dispose();canvas.remove();labels.remove();}};
 }
