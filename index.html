@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#193f37"><title>한성가록 · 조선 가문 경영</title><link rel="stylesheet" href="style.css"></head>
+<body><header><div class="brand"><b class="seal" aria-hidden="true">漢<br>城</b><div><strong>한성가록</strong><small>漢 城 家 錄</small></div></div><button id="help" class="quiet">게임 안내 <span>?</span></button></header>
+<main><div class="heading"><div><p class="eyebrow">한성부 · 종로 일대</p><h1>도성 경영</h1></div><div class="date"><b id="date"></b><small id="turn"></small></div></div>
+<section class="stats" id="stats" aria-label="가문 현황"></section>
+<div class="board"><section class="scene" aria-label="한성 지도"><div class="map"><img src="market.webp" alt="기와집과 시장 골목이 산 아래 펼쳐진 한성의 상상도"><span class="mapname">漢城府 <i></i> 한성도</span>
+<button class="pin workshop" data-tab="shop">지물전</button><button class="pin market" data-tab="market">종로 시전</button><button class="pin house" data-tab="house">본가</button></div>
+<div class="news"><small>장시 소식</small><span id="news"></span></div></section>
+<section class="ledger"><nav aria-label="활동 장소" id="tabs"><button data-tab="shop">지물전</button><button data-tab="market">시전</button><button data-tab="house">가문</button></nav><div id="panel"></div><div class="endturn"><button id="advance">다음 계절로 <span>→</span></button></div></section></div>
+<div class="lower"><section><h2>가문 일지</h2><ol id="log"></ol></section><section><h2>가업 계승</h2><div id="legacy"></div></section></div>
+<footer>한성가록 <span id="save"></span></footer></main>
+<dialog id="guide"><h2>가문을 이끄는 법</h2><p>1600년, 전란이 끝난 한성. 종로에 다시 문을 연 지물전에서 한 가문의 이야기가 시작됩니다.</p><p>한 계절에 두 번 일할 수 있습니다. 닥을 마련해 종이를 뜨고 시전에서 팔아 보세요. 철마다 거래 조건이 달라집니다.</p><p>관아 주문으로 신망을 얻거나 혼인으로 일손을 늘릴 수 있습니다. 집안의 젊은 친족에게 일을 가르쳐 가업을 물려주는 것이 목표입니다.</p><p>곡식은 거래와 살림을 나타내는 게임 단위입니다. 인물, 시세와 사건은 시대를 바탕으로 지어냈습니다.</p><button autofocus id="close">장부로 돌아가기</button></dialog>
+<div id="toast" hidden></div><div class="sr" id="notice" role="status" aria-live="polite"></div><script type="module" src="app.js"></script></body></html>
