@@ -1,51 +1,255 @@
-import {fresh, date, actions, act, advance, report} from './engine.mjs';
-const key='hanseong-family-v1';
-const el=id=>document.getElementById(id);
-let game=fresh();
-try{
-  const raw=JSON.parse(localStorage.getItem(key));
-  if(raw&&Object.keys(game).every(k=>typeof raw[k]===typeof game[k])&&Array.isArray(raw.log))game=raw;
-}catch{}
-let tab='shop';
-const places={
-  shop:['紙','종로 지물전','닥을 들여 종이를 뜨는 우리 가문의 일터.'],
-  market:['市','종로 시전','장을 살펴 물건을 팔고 관아의 주문을 받습니다.'],
-  house:['家','가문의 안채','인연을 맺고 훗날 가업을 이을 사람을 기릅니다.']
+import {places, people, roads, fresh, tick, command, options, price, clock, loadGame} from './simulation.mjs';
+
+const el = id => document.getElementById(id);
+const glyphs = {
+  book:'M3 5q5-2 9 1 4-3 9-1v14q-5-2-9 1-4-3-9-1ZM12 6v14',
+  sun:'M8 12a4 4 0 1 0 8 0 4 4 0 1 0-8 0M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2',
+  pause:'M8 5v14M16 5v14',play:'m8 4 10 8-10 8Z',flag:'M5 22V3q4-3 8 0t7 0l-2 5 2 4q-4 3-8 0t-7 0',
+  target:'M4 12a8 8 0 1 0 16 0 8 8 0 1 0-16 0M12 2v5m0 10v5M2 12h5m10 0h5',
+  frame:'M9 4H4v5m11-5h5v5M4 15v5h5m6 0h5v-5',rotateLeft:'m9 3-4 4 4 4M5 7h8a7 7 0 1 1-6 11',
+  rotateRight:'m15 3 4 4-4 4m4-4h-8a7 7 0 1 0 6 11',plus:'M12 5v14M5 12h14',minus:'M5 12h14',
+  pointer:'m4 3 5 17 3-6 6 5 2-2-6-5 6-2Z',arrowRight:'m9 5 7 7-7 7',
+  feather:'M4 21 16 9m-9 9q-2-7 4-12 4-4 10-4 0 9-6 14-4 3-8 2Z',
+  close:'m5 5 14 14M19 5 5 19',grain:'M12 22V6m0 11q-7-1-7-7 6 0 7 7Zm0-6q7-1 7-7-6 0-7 7Zm0-4q-4-3 0-6 4 3 0 6Z',
+  bark:'m4 17 12-13 4 3L8 21Zm3-5-3-3m10 0 1-6m0 12 6-1',
+  sheet:'m2 8 10-5 10 5-10 5Zm1 5 9 5 9-5M3 17l9 5 9-5',stall:'M4 10v10h16V10M2 10l3-6h14l3 6q-2 3-5 0-2 3-5 0-2 3-5 0-3 3-5 0Zm5 10v-5h4v5',
+  price:'M3 19h18M4 14l5-5 4 3 7-8m-5 0h5v5',haul:'M2 6h3l3 10h10l3-7H6m3 11h1m7 0h1',
+  hand:'M6 11V7a1.5 1.5 0 0 1 3 0v4-6a1.5 1.5 0 0 1 3 0v6-5a1.5 1.5 0 0 1 3 0v6-3a1.5 1.5 0 0 1 3 0v6q0 6-6 6-3 0-5-3l-4-6q-1-3 2-2Z',
+  coin:'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0m7-2h4v4h-4Z'
 };
-const icons={
-  grain:'<path d="M12 21V5m0 11Q4 16 5 10q6 0 7 6Zm0-5q7 0 7-6-6 0-7 6ZM12 7Q8 4 12 1q4 3 0 6Z"/>',
-  bark:'<path d="m4 18 13-13 3 3L7 21zm3-6L4 9m10 0 1-6m0 11 6-1"/>',
-  paper:'<path d="m3 9 9-5 9 5-9 5zm0 4 9 5 9-5M3 17l9 5 9-5"/>',
-  fame:'<path d="m3 11 9-7 9 7M5 11h14M7 13v5m5-5v5m5-5v5M4 20h16"/>'
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('class','glyph');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
+  const path = document.createElementNS(svg.namespaceURI,'path');
+  path.setAttribute('d',glyphs[name]);svg.append(path);return svg;
+}
+document.querySelectorAll('[data-icon]').forEach(node => node.replaceWith(icon(node.dataset.icon)));
+
+const saveKey='hanseong-garok-realtime-v1';
+let game;
+try {game=loadGame(localStorage.getItem(saveKey));} catch {}
+game ||= fresh();
+let selected='apprentice', following=null, lastSpeed=game.speed||1, visual, toastTimer;
+const actor = id => game.agents.find(a => a.id===id);
+const rosterNodes = {}, resourceValues = {}, actionNodes = new Map();
+const portrait = {master:'head',apprentice:'apprentice',porter:'porter',rival:'rival'};
+for(const [id,person] of Object.entries(people)){
+  const b=document.createElement('button');b.type='button';b.className='person';b.dataset.person=id;
+  b.title=person.name+' · '+person.role;b.setAttribute('aria-label',b.title+' 선택');
+  const img=document.createElement('img');img.src='./portraits/'+portrait[id]+'.webp';img.alt='';img.draggable=false;
+  const label=document.createElement('span');label.textContent=person.role;
+  b.append(img,label);b.onclick=()=>selectPerson(id);
+  el('roster').append(b);rosterNodes[id]=b;
+}
+const resources=[
+  ['grain','가산','말','grain'],['bark','닥 재료','묶음','bark'],['paper','공방 한지','장','sheet'],
+  ['stock','시전 한지','장','stall'],['price','한지 시세','말/장','price']
+];
+for(const [key,title,unit,image] of resources){
+  const block=document.createElement('div');block.className='resource';block.title=title;
+  const info=document.createElement('div'), small=document.createElement('small'), big=document.createElement('b'), em=document.createElement('em');
+  const value=document.createTextNode('0');small.textContent=title;em.textContent=unit;big.append(value,em);info.append(small,big);
+  block.append(icon(image),info);el('inventory').append(block);resourceValues[key]=value;
+}
+for(const [key,p] of Object.entries(places))el('destination').add(new Option(p.name,key));
+el('destination').value='market';
+
+function notify(text,error=false){
+  el('toast').textContent=text;el('toast').classList.toggle('error',error);el('toast').hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>el('toast').hidden=true,3000);
+}
+function persist(){
+  try {localStorage.setItem(saveKey,JSON.stringify(game));el('save-state').textContent='이 기기에 자동 저장';}
+  catch {el('save-state').textContent='저장 공간을 사용할 수 없습니다';}
+}
+function issue(id,target){
+  const result=command(game,selected,id,target);
+  notify(people[selected].name+' · '+result.message,!result.ok);
+  if(result.ok)persist();renderHUD();
+}
+function selectPerson(id){
+  if(!Object.hasOwn(people,id))return;
+  selected=id;
+  if(following)following=id;
+  renderHUD();
+}
+function pick(hit,button){
+  if(!hit)return;
+  if(hit.type==='actor'&&button!==2){selectPerson(hit.id);return;}
+  if(hit.type==='place')issue('move',hit.id);
+  else if(Number.isFinite(hit.x)&&Number.isFinite(hit.z))issue('move',{x:hit.x,z:hit.z});
+}
+el('go').onclick=()=>issue('move',el('destination').value);
+el('follow').onclick=()=>{following=following===selected?null:selected;renderHUD();};
+function setSpeed(n){
+  if(n>0)lastSpeed=n;
+  game.speed=n;renderHUD();persist();
+}
+el('pause').onclick=()=>setSpeed(game.speed?0:lastSpeed);
+document.querySelectorAll('[data-speed]').forEach(b=>b.onclick=()=>setSpeed(Number(b.dataset.speed)));
+const cameras={
+  reset:()=>{following=null;visual?.reset();renderHUD();},left:()=>visual?.rotate(-Math.PI/8),
+  right:()=>visual?.rotate(Math.PI/8),zoomIn:()=>visual?.zoom(1.18),zoomOut:()=>visual?.zoom(1/1.18)
 };
-function render(){
-  el('date').textContent=date(game);
-  el('turn').textContent=game.generation+'대 가주 · 행동 '+game.ap+'/2';
-  el('stats').innerHTML=[['grain','가산','말'],['bark','닥','묶음'],['paper','한지','장'],['fame','신망','점']].map(([k,label,unit])=>'<div class="stat"><svg aria-hidden="true" viewBox="0 0 24 24">'+icons[k]+'</svg><div><small>'+label+'</small><b>'+game[k]+'<em>'+unit+'</em></b></div></div>').join('');
-  const [,price,cost]=report(game);
-  el('news').textContent=report(game)[0];
-  document.querySelectorAll('[data-tab]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.tab===tab)));
-  const [symbol,name,note]=places[tab];
-  const list=actions(game).filter(a=>a.tab===tab);
-  el('panel').innerHTML='<div class="location"><div class="stamp">'+symbol+'</div><div><h2>'+name+'</h2><p>'+note+'</p></div></div><div class="rule"><span>이번 계절의 행동</span><span>'+('●'.repeat(game.ap)+'○'.repeat(2-game.ap))+'</span></div>'+list.map(a=>'<button class="action" data-action="'+a.id+'" '+(!game.ap||!a.ok?'disabled':'')+'><div><b>'+a.name+'</b><small>'+a.desc+(a.id==='teach'?' · 한지 −1':'')+'</small></div><em>'+a.tag+'</em></button>').join('')+'<p class="marketline">'+(tab==='shop'?'닥 2묶음 시세 · 곡식 '+cost+'말':tab==='market'?'한지 1장 시세 · 곡식 '+price+'말':'현 가주 · '+(game.office?'관아 서리':'지물전 주인')+' · '+(game.spouse?'기혼':'미혼'))+'</p>';
-  el('advance').innerHTML='다음 계절로 <span>→</span>';
-  el('advance').title='이번 계절을 마치고 살림값 '+(game.spouse?3:2)+'말을 지불합니다.';
-  el('log').replaceChildren(...game.log.slice(0,4).map(line=>{const li=document.createElement('li');const [d,...rest]=line.split(' · ');const time=document.createElement('time');time.textContent=d;li.append(time,rest.join(' · '));return li;}));
-  el('legacy').innerHTML='<b>'+game.generation+'대 지물전</b><p>'+(game.generation>1?'계승을 이루었습니다. 다음 세대의 이야기를 이어가세요.':'후계자를 길러 다음 세대에 지물전을 물려주세요.')+'</p>'+[['후계자 수업',game.training,3],['가문 신망',game.fame,6],['가산',game.grain,30]].map(([n,v,max])=>'<div class="progress"><span>'+n+'</span><progress max="'+max+'" value="'+Math.min(max,v)+'"></progress><small>'+v+' / '+max+'</small></div>').join('');
+document.querySelectorAll('[data-camera]').forEach(b=>b.onclick=()=>cameras[b.dataset.camera]());
+const actionIcon={produce:'sheet',haul:'haul',sell:'coin',buy:'bark',labor:'hand',contract:'book'};
+function updateActions(){
+  const choices=options(game,selected);
+  const wanted=new Set(choices.map(c=>c.id));
+  for(const [id,parts] of actionNodes){
+    if(!wanted.has(id)){parts.button.remove();actionNodes.delete(id);}
+  }
+  let note=el('rival-note');
+  if(!choices.length){
+    if(!note){note=document.createElement('p');note.id='rival-note';note.className='rival-note';el('actions').append(note);}
+    note.textContent='이웃 지물전의 상인입니다. 그가 시전에 종이를 풀면 한지 시세가 달라집니다.';
+  } else {note?.remove();}
+  let primary=true;
+  for(const c of choices){
+    let parts=actionNodes.get(c.id);
+    if(!parts){
+      const button=document.createElement('button');button.type='button';button.className='action';button.dataset.action=c.id;
+      const copy=document.createElement('span'),title=document.createElement('strong'),desc=document.createElement('small');
+      copy.className='action-copy';copy.append(title,desc);button.append(icon(actionIcon[c.id]||'flag'),copy,icon('arrowRight'));
+      button.onclick=()=>issue(c.id);el('actions').append(button);parts={button,title,desc};actionNodes.set(c.id,parts);
+    }
+    parts.button.disabled=!c.enabled;parts.button.classList.toggle('primary',c.enabled&&primary);
+    if(c.enabled)primary=false;
+    parts.title.textContent=c.label;parts.desc.textContent=c.detail;
+  }
 }
-function save(){
-  try{localStorage.setItem(key,JSON.stringify(game));el('save').textContent='이 기기에 자동 저장됨';}catch{el('save').textContent='이 브라우저에서는 저장할 수 없습니다';}
+let pauseState;
+function renderHUD(){
+  const t=clock(game),a=actor(selected);
+  el('time').textContent=t.text;el('day').textContent=t.day+'일째';
+  const paused=game.speed===0;
+  if(paused!==pauseState){
+    const b=el('pause'),name=paused?'시간 재개':'일시정지';b.replaceChildren(icon(paused?'play':'pause'));
+    b.title=name+' (스페이스)';b.setAttribute('aria-label',name);b.setAttribute('aria-pressed',String(paused));pauseState=paused;
+  }
+  el('pause-badge').hidden=!paused;
+  document.querySelectorAll('[data-speed]').forEach(b=>b.setAttribute('aria-pressed',String(game.speed===Number(b.dataset.speed))));
+  const completed=[game.crafted>0,game.delivered>0,game.sold>0].filter(Boolean).length;
+  el('goal-count').textContent=completed+' / 3';
+  let goal='도제 분이를 선택해 한지 뜨기를 지시하세요.';
+  if(completed===0&&['toCraft','craft'].includes(actor('apprentice').task))goal='도제가 일하는 동안 가주를 종로 시전으로 보내세요.';
+  if(completed===1)goal=actor('porter').task==='delivery'?'짐꾼이 시전으로 향합니다. 가주를 시전에 보내세요.':'짐꾼 돌석에게 한지 운송을 지시하세요.';
+  if(completed===2)goal=actor('master').at==='market'?'시전에 도착한 가주를 선택해 한지를 판매하세요.':'가주 윤서진을 종로 시전으로 보내 한지를 판매하세요.';
+  if(completed===3)goal='첫 거래를 성사시켰습니다. 공방을 계속 운영해 보세요.';
+  el('goal-text').textContent=goal;
+  [...el('goal-track').children].forEach((v,i)=>v.classList.toggle('done',i<completed));
+  for(const [key] of resources)resourceValues[key].nodeValue=String(key==='price'?price(game):game[key]);
+  for(const [key,b] of Object.entries(rosterNodes))b.setAttribute('aria-pressed',String(key===selected));
+  el('actor-role').textContent=people[selected].role;el('actor-name').textContent=people[selected].name;
+  el('actor-status').textContent=(a.at?places[a.at].name+' · ':'')+a.action+(a.cargo?' · 등짐 '+a.cargo+'장':'')+(a.mode==='work'?' · '+Math.ceil(a.remaining)+'초':'');
+  el('work-meter').hidden=a.mode!=='work'||!a.duration;
+  if(!el('work-meter').hidden)el('work-meter').firstElementChild.style.width=(100*(1-a.remaining/a.duration))+'%';
+  el('follow').setAttribute('aria-pressed',String(following===selected));
+  el('travel').hidden=selected==='rival';
+  const busy=!['idle','waitPaper','move'].includes(a.task);el('go').disabled=busy;el('go').title=busy?'맡은 일을 마치면 이동할 수 있습니다.':'선택한 인물을 보냅니다.';
+  updateActions();
+  if(game.log.length){
+    el('news-time').textContent=clock({time:game.log[0].time}).text;
+    el('news-text').textContent=game.log[0].text;
+  }
 }
-function showResult(){
-  render();save();el('notice').textContent=game.log[0];
-  const toast=el('toast');toast.textContent=game.log[0].split(' · ').slice(1).join(' · ');toast.hidden=false;clearTimeout(showResult.timer);showResult.timer=setTimeout(()=>toast.hidden=true,3000);
+function openBook(which){
+  const content=el('dialog-content');content.replaceChildren();
+  if(which==='help'){
+    el('dialog-title').textContent='운종가에서의 하루';
+    for(const text of [
+      '1600년 한성. 종로 지물전에서 가족과 일꾼을 지휘해 첫 한 짐을 팔아 보세요.',
+      '지도 위 사람이나 초상화를 눌러 인물을 선택하세요. 길이나 건물을 클릭·탭하면 그곳으로 걷습니다. 마우스 오른쪽 버튼으로도 이동할 수 있습니다.',
+      '분이에게 한지 뜨기, 돌석에게 한지 운송을 지시하세요. 윤서진을 종로 시전으로 보낸 뒤 짐이 도착하면 판매하세요. 다음 물량을 준비할 때는 가주가 공방에서 닥을 매입할 수 있습니다.',
+      '지도를 끌어 시점을 옮기고, 휠이나 두 손가락으로 확대하세요. 시점 버튼으로 회전하고, 따라가기로 선택한 인물을 추적합니다.',
+      '스페이스는 일시정지, 숫자 1–4는 인물 선택입니다. 정지 중에도 명령을 내릴 수 있고, 다른 탭으로 이동하면 시간이 멈춥니다. 진행 상황은 이 브라우저에 저장됩니다.'
+    ]){const p=document.createElement('p');p.textContent=text;content.append(p);}
+  }else{
+    el('dialog-title').textContent='가문 일지';
+    const list=document.createElement('ol');
+    for(const entry of game.log){
+      const li=document.createElement('li'),stamp=document.createElement('time'),t=clock({time:entry.time});
+      stamp.textContent=t.day+'일 '+t.text;li.append(stamp,document.createTextNode(entry.text));list.append(li);
+    }content.append(list);
+  }
+  el('book-dialog').showModal();
 }
-document.addEventListener('click',e=>{
-  const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.tab){tab=b.dataset.tab;render();if(b.classList.contains('pin')&&matchMedia('(max-width:800px)').matches)el('tabs').scrollIntoView({block:'nearest'});}
-  else if(b.dataset.action&&act(game,b.dataset.action))showResult();
+el('help').onclick=()=>openBook('help');el('journal-open').onclick=()=>openBook('log');el('close').onclick=()=>el('book-dialog').close();
+el('book-dialog').onclick=e=>{if(e.target===el('book-dialog')){
+  const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();
+}};
+document.addEventListener('keydown',e=>{
+  if(e.defaultPrevented||e.altKey||e.metaKey||e.ctrlKey||el('book-dialog').open||e.target.matches('input,select,textarea'))return;
+  if(e.code==='Space'&&!e.target.closest('button')){e.preventDefault();if(!e.repeat)setSpeed(game.speed?0:lastSpeed);}
+  const key=Number(e.key);if(key>=1&&key<=4)selectPerson(Object.keys(people)[key-1]);
 });
-el('advance').onclick=()=>{advance(game);showResult();};
-el('help').onclick=()=>el('guide').showModal();
-el('close').onclick=()=>el('guide').close();
-render();save();
+
+// The road diagram still accepts orders on devices without a working WebGL context.
+function makeRoadMap(mount){
+  mount.replaceChildren();
+  const canvas=document.createElement('canvas');mount.append(canvas);
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return {render(){},zoom(){},rotate(){},reset(){}};
+  let angle=0,magnification=1,focus={x:0,z:0},hitBoxes=[],transform;
+  const colors={master:'#315c4c',apprentice:'#ad6147',porter:'#606a8b',rival:'#825747'};
+  function render({actors,selectedId,followId}){
+    const w=mount.clientWidth,h=mount.clientHeight,ratio=Math.min(devicePixelRatio||1,2);
+    if(!w||!h)return;
+    if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
+    const tracked=actors.find(a=>a.id===followId);if(tracked)focus={x:tracked.x,z:tracked.z};
+    const scale=Math.min(w/57,h/36)*magnification;
+    const cx=Math.cos(angle),sx=Math.sin(angle);
+    transform={scale,cx,sx,w,h};
+    const project=p=>({x:w/2+((p.x-focus.x)*cx-(p.z-focus.z)*sx)*scale,y:h/2+((p.x-focus.x)*sx+(p.z-focus.z)*cx)*scale});
+    ctx.setTransform(ratio,0,0,ratio,0,0);ctx.fillStyle='#d8d6b7';ctx.fillRect(0,0,w,h);
+    ctx.strokeStyle='#f6e8c7';ctx.lineWidth=Math.max(4,scale*1.2);ctx.lineCap='round';
+    for(const [from,to] of roads){const a=project(from),b=project(to);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+    hitBoxes=[];
+    for(const [id,p] of Object.entries(places)){
+      const pos=project(p),dir=p.z<0?-1:1,cy=pos.y+dir*25;
+      ctx.font='bold 12px serif';const width=ctx.measureText(p.name).width+14;
+      ctx.fillStyle='#f8f2de';ctx.fillRect(pos.x-width/2,cy-10,width,20);ctx.strokeStyle='#676f58';ctx.lineWidth=1;ctx.strokeRect(pos.x-width/2,cy-10,width,20);
+      ctx.fillStyle='#2d4235';ctx.textAlign='center';ctx.fillText(p.name,pos.x,cy+4);
+      hitBoxes.push({type:'place',id,x:p.x,z:p.z,left:pos.x-width/2,right:pos.x+width/2,top:cy-12,bottom:cy+12});
+    }
+    for(const a of actors){
+      const p=project(a);ctx.beginPath();ctx.arc(p.x,p.y,a.id===selectedId?8:6,0,2*Math.PI);ctx.fillStyle=colors[a.id];ctx.fill();
+      ctx.lineWidth=a.id===selectedId?3:1;ctx.strokeStyle=a.id===selectedId?'#ffdda1':'#fff9e3';ctx.stroke();
+      hitBoxes.push({type:'actor',id:a.id,x:a.x,z:a.z,left:p.x-8,right:p.x+8,top:p.y-8,bottom:p.y+8});
+    }
+  }
+  function canvasPick(e){
+    if(!transform)return;const box=canvas.getBoundingClientRect(),x=e.clientX-box.left,y=e.clientY-box.top;
+    const hit=hitBoxes.slice().reverse().find(item=>x>=item.left&&x<=item.right&&y>=item.top&&y<=item.bottom);
+    if(hit){pick(hit,e.button);return;}
+    const {w,h,cx,sx,scale}=transform,dx=(x-w/2)/scale,dy=(y-h/2)/scale;
+    pick({type:'ground',x:focus.x+cx*dx+sx*dy,z:focus.z-sx*dx+cx*dy},e.button);
+  }
+  canvas.onclick=canvasPick;canvas.oncontextmenu=e=>{e.preventDefault();canvasPick(e);};
+  return {render,rotate(n){angle+=n;},zoom(n){magnification=Math.min(2.5,Math.max(.6,magnification*n));},reset(){focus={x:0,z:0};angle=0;magnification=1;}};
+}
+
+renderHUD();persist();
+try {
+  const {createScene}=await import('./scene.js');
+  visual=createScene(el('scene'),{onPick:pick,onPan:()=>{following=null;renderHUD();}});
+} catch(err) {
+  console.warn('3D 장면 초기화 실패',err);
+  visual=makeRoadMap(el('scene'));
+  el('map-hint').textContent='이 기기에서는 평면 지도로 표시합니다. 인물을 선택하고 목적지를 눌러 주세요.';
+  notify('3D 화면을 열 수 없어 평면 지도로 시작합니다.');
+}
+let previous=0,lastHUD=0,lastSave=0;
+function frame(now){
+  if(!document.hidden){
+    const dt=previous?Math.min((now-previous)/1000,.25):0;
+    tick(game,dt*game.speed);
+    visual.render({actors:game.agents,selectedId:selected,followId:following,seconds:game.time,paused:!game.speed});
+    if(now-lastHUD>200){renderHUD();lastHUD=now;}
+    if(now-lastSave>3500){persist();lastSave=now;}
+  }
+  previous=now;requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange',()=>{previous=0;if(document.hidden)persist();});
+window.addEventListener('pagehide',persist);
+requestAnimationFrame(frame);
