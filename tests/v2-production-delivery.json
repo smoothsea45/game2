@@ -1,0 +1,154 @@
+{
+  "version": 2,
+  "time": 11,
+  "speed": 1,
+  "agents": [
+    {
+      "id": "master",
+      "x": 23.049999999999986,
+      "z": 0,
+      "at": null,
+      "target": "yangju",
+      "heading": 1.5707963267948966,
+      "mode": "walk",
+      "task": "move",
+      "action": "양주 장터 방면으로 이동 중",
+      "remaining": 0,
+      "duration": 0,
+      "path": [
+        {
+          "x": 79,
+          "z": 0
+        },
+        {
+          "x": 79,
+          "z": 4
+        }
+      ]
+    },
+    {
+      "id": "apprentice",
+      "x": -16,
+      "z": -4.8,
+      "at": "workshop",
+      "target": null,
+      "heading": 0.7853981633974483,
+      "mode": "work",
+      "task": "craft",
+      "action": "발로 한지를 뜨는 중",
+      "remaining": 7,
+      "duration": 9,
+      "path": []
+    },
+    {
+      "id": "porter",
+      "x": -15.091176470588241,
+      "z": 0,
+      "at": null,
+      "target": "market",
+      "heading": 1.5707963267948966,
+      "mode": "walk",
+      "task": "delivery",
+      "action": "시전으로 한지 운반 중",
+      "remaining": 0,
+      "duration": 0,
+      "path": [
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 5.1
+        }
+      ]
+    },
+    {
+      "id": "rival",
+      "x": -16,
+      "z": 1.95,
+      "at": null,
+      "target": "market",
+      "heading": 3.141592653589793,
+      "mode": "walk",
+      "task": "rivalDeliver",
+      "action": "이웃 점포의 한지를 싣고 장으로",
+      "remaining": 0,
+      "duration": 0,
+      "path": [
+        {
+          "x": -16,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 2.8
+        }
+      ]
+    }
+  ],
+  "inventory": [
+    {
+      "owner": "player",
+      "holder": "workshop",
+      "item": "bark",
+      "quantity": 2
+    },
+    {
+      "owner": "market",
+      "holder": "market",
+      "item": "paper",
+      "quantity": 3
+    },
+    {
+      "owner": "player",
+      "holder": "porter",
+      "item": "paper",
+      "quantity": 4
+    },
+    {
+      "owner": "player",
+      "holder": "workshop:reserved",
+      "item": "bark",
+      "quantity": 1
+    },
+    {
+      "owner": "rival",
+      "holder": "rival",
+      "item": "paper",
+      "quantity": 6
+    }
+  ],
+  "grain": 18,
+  "sold": 0,
+  "crafted": 4,
+  "delivered": 0,
+  "rivalSales": 0,
+  "contractDay": 0,
+  "log": [
+    {
+      "time": 9,
+      "text": "돌석이 공방에서 한지 4장을 지고 출발했다."
+    },
+    {
+      "time": 9,
+      "text": "분이가 한지 4장을 공방 선반에 올렸다."
+    },
+    {
+      "time": 0,
+      "text": "한성의 새벽 장이 섰다. 오늘 첫 한지를 지어 내다 팔자."
+    }
+  ]
+}

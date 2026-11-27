@@ -31,7 +31,7 @@ test('a real v1 save migrates ongoing work and treats carried paper separately f
   const original = JSON.parse(legacySave);
   const state = loadGame(legacySave);
   assert.ok(state);
-  assert.equal(state.version, 2);
+  assert.equal(state.version, 3);
   assert.equal(state.time, original.time);
   assert.equal(state.grain, original.grain);
   assert.equal(actor(state, 'apprentice').remaining, 7);

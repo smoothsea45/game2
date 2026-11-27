@@ -7,6 +7,9 @@ function bin(owner, holder, item) {
 export const bins = {
   bark: bin('player', 'workshop', 'bark'),
   reservedBark: bin('player', 'workshop:reserved', 'bark'),
+  marketBark: bin('market', 'market', 'bark'),
+  pickupBark: bin('player', 'marketPickup', 'bark'),
+  porterBark: bin('player', 'porter', 'bark'),
   workshop: bin('player', 'workshop', 'paper'),
   porter: bin('player', 'porter', 'paper'),
   stall: bin('player', 'stall', 'paper'),

@@ -2,6 +2,7 @@ import * as T from './vendor/three.module.js';
 import {mergeGeometries} from './vendor/BufferGeometryUtils.js';
 import {makeHanok} from './architecture.js';
 import {roads} from './simulation.mjs';
+import {yangjuPlot} from './road-map.js';
 
 // A single static mesh lets even the distant village share one draw call.
 export function village() {
@@ -224,9 +225,36 @@ export function village() {
   yard(83.8,-6.9,8.8,5.5);
   roofed(83.8,-7.4,6.6,3.8,'cottage');
   roofed(93.4,1.4,5.4,3.5,'cottage',-.10);
-  fabricStall(75.3,-4.6,.04,'#b99855');
-  fabricStall(72.4,-6.4,-Math.PI/2,'#829d88');
+  fabricStall(68.4,-5.2,.04,'#b99855');
+  fabricStall(69.4,-8.25,-Math.PI/2,'#829d88');
   fabricStall(84.2,10.5,Math.PI,'#aa7755');
+  // Empty earth is bounded by stakes and flax rope. An open gate faces the
+  // road and meets the plot's doorstep without obstructing passing travelers.
+  const plot=yangjuPlot, left=plot.x-plot.w/2, right=plot.x+plot.w/2;
+  const back=plot.z-plot.d/2, front=plot.z+plot.d/2;
+  box(plot.x,-.025,plot.z,plot.w,.12,plot.d,'#bba176');
+  box(plot.x,.042,plot.z,plot.w-.22,.045,plot.d-.22,'#cbb58b');
+  for(let row=0;row<3;row++) {
+    const x=left+1+row*.72;
+    box(x,.073,back+2,.16,.055,2.1,'#b39b76');
+  }
+  box(right+.59,.006,-5,1.18,.024,1.40,'#d3be99');
+  const corners=[[left,front],[left,back],[right,back],[right,front]];
+  const gateFront=-4.18,gateBack=-5.82;
+  function boundary(a,b){
+    const mid=[(a[0]+b[0])/2,.37,(a[1]+b[1])/2];
+    stem([a[0],.59,a[1]],mid,.031,'#a58960');
+    stem(mid,[b[0],.59,b[1]],.031,'#a58960');
+  }
+  for(const [x,z] of [...corners,[right,gateFront],[right,gateBack]]) {
+    box(x,.43,z,.13,.86,.13,'#816045');
+    box(x,.62,z,.145,.075,.145,'#bea276');
+  }
+  boundary(corners[0],corners[1]);boundary(corners[1],corners[2]);
+  boundary(corners[0],corners[3]);boundary(corners[2],[right,gateBack]);
+  boundary(corners[3],[right,gateFront]);
+  box(plot.signX,1.16,plot.signZ,.14,2.32,.14,'#72553d');
+  box(plot.signX-.50,2.22,plot.signZ,1.20,.09,.09,'#846749');
   // Narrowing haystacks, tied with straw rope, gathered for storage.
   const straw=shape('sheaf',()=>new T.ConeGeometry(1,1,8));
   for(const [x,z,s] of [[87.8,-4.4,1.2],[89.1,-4.8,1],[87.8,-6.1,.9],[92,4,.72],[85.6,9.1,.65]]) {

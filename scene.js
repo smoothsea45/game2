@@ -1,5 +1,6 @@
 import * as T from './vendor/three.module.js';
 import {village} from './landscape.js';
+import {yangjuPlot,plotAppearance} from './road-map.js';
 import {makePerson} from './characters.js';
 import {places,people} from './simulation.mjs';
 
@@ -8,7 +9,8 @@ const roofs = {
   workshop:{x:-20.8,z:-5,w:5,d:6.8},
   market:{x:21.3,z:4.5,w:4.9,d:7.8},
   rival:{x:-21,z:5,w:5,d:6.4},
-  yangju:{x:85,z:5.7,w:5.2,d:7.1}
+  yangju:{x:85,z:5.7,w:5.2,d:7.1},
+  plot:{...yangjuPlot,h:.86}
 };
 const labelStyles = {
   position:'absolute',whiteSpace:'nowrap',display:'block',margin:'0',padding:'3px 6px',
@@ -40,6 +42,12 @@ export function createScene(container,{onPick,onPan}={}) {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.mapSize.set(1536,1536);sun.shadow.bias=-.00045;sun.shadow.normalBias=.032;
   scene.add(fill,sun,sun.target,village());
+  const flagShape=new T.Shape();
+  flagShape.moveTo(0,0);flagShape.lineTo(-1.02,0);flagShape.lineTo(-1.02,-.94);
+  flagShape.lineTo(-.52,-.74);flagShape.lineTo(0,-.94);flagShape.closePath();
+  const flag=new T.Mesh(new T.ShapeGeometry(flagShape),new T.MeshLambertMaterial({side:T.DoubleSide}));
+  flag.position.set(yangjuPlot.signX-.05,2.19,yangjuPlot.signZ);
+  flag.rotation.y=.12;scene.add(flag);
   const peopleModels=new Map(Object.keys(people).map(id=>[id,makePerson(id)]));
   for(const m of peopleModels.values())scene.add(m.group);
 
@@ -78,10 +86,10 @@ export function createScene(container,{onPick,onPan}={}) {
 
   const target=new T.Vector3(0,0,-.5),screen=new T.Vector3(),hitPoint=new T.Vector3(),pointer=new T.Vector2();
   const cast=new T.Raycaster(),ground=new T.Plane(new T.Vector3(0,1,0),0);
-  const rayBoxes=Object.entries(roofs).filter(([id])=>places[id]).map(([id,{x,z,w,d}])=>[id,new T.Box3(
-    new T.Vector3(x-w/2,0,z-d/2),new T.Vector3(x+w/2,3.8,z+d/2))]);
+  const rayBoxes=Object.entries(roofs).filter(([id])=>places[id]).map(([id,{x,z,w,d,h=3.8}])=>[id,new T.Box3(
+    new T.Vector3(x-w/2,0,z-d/2),new T.Vector3(x+w/2,h,z+d/2))]);
   let width=1,height=1,zoomLevel=1,angle=.30,frustum=35,currentActors=[],selected=null;
-  let hideActorLabel=false;
+  let hideActorLabel=false,lastDeed,lastMeeting=false;
   let inertialFrame=false,previousFollow=null;
   const eastLimit=Math.max(...Object.values(places).map(p=>p.x))+10;
   function focusPlace(id){
@@ -148,7 +156,7 @@ export function createScene(container,{onPick,onPan}={}) {
       // At phone overview scale, leave the rival roof pickable without its extra placard.
       if(id==='rival'&&height<520&&zoomLevel<1.18){node.style.visibility='hidden';continue;}
       const {x,z}=roofs[id]??places[id];
-      positionLabel(node,projected(x,4.25,z),places[id].name.length*11+14,occupied,false);
+      positionLabel(node,projected(x,id==='plot'?2.60:4.25,z),node.textContent.length*11+14,occupied,false);
     }
   }
   function pick(clientX,clientY,button){
@@ -224,7 +232,23 @@ export function createScene(container,{onPick,onPan}={}) {
   canvas.addEventListener('pointercancel',e=>release(e,false));
   canvas.addEventListener('wheel',e=>{e.preventDefault();zoom(Math.exp(-Math.sign(e.deltaY)*.13));},{passive:false});
   let lastLight=-20,lastUpdate=0;
-  function render({actors,selectedId,followId,seconds=0,hideActorLabel:hideLabel=false}){
+  function render({actors,selectedId,followId,seconds=0,hideActorLabel:hideLabel=false,plotOwner=null,meetingAvailable=false}){
+    if(meetingAvailable!==lastMeeting){
+      const node=signs.market.node;
+      node.textContent=places.market.name+(meetingAvailable?' · 서책상 면담':'');
+      node.setAttribute('aria-label',node.textContent+' 이동');
+      node.style.background=meetingAvailable?'#455773':labelStyles.background;
+      node.style.color=meetingAvailable?'#fff8e7':labelStyles.color;
+      lastMeeting=meetingAvailable;
+    }
+    if(plotOwner!==lastDeed && signs.plot){
+      const deed=plotAppearance(plotOwner),node=signs.plot.node;
+      flag.material.color.set(deed.cloth);
+      node.textContent=places.plot.name+' · '+deed.state;
+      node.setAttribute('aria-label',node.textContent+' 이동');
+      node.style.borderColor=deed.ink;node.style.color=deed.ink;
+      lastDeed=plotOwner;
+    }
     currentActors=actors;selected=selectedId;hideActorLabel=hideLabel;
     for(const a of actors)peopleModels.get(a.id)?.animate(a,seconds,a.id===selectedId);
     const active=actors.find(a=>a.id===selectedId),follow=actors.find(a=>a.id===followId);
@@ -235,7 +259,7 @@ export function createScene(container,{onPick,onPan}={}) {
     previousFollow=inertialFrame?null:(follow?.id??null);inertialFrame=false;
     if(active){circle.visible=true;circle.position.set(active.x,.068,active.z);}else circle.visible=false;
     extras[0].animate({x:18.3,z:-3.2,mode:'work',heading:-.9,cargo:0},seconds,false);
-    extras[3].animate({x:75.4,z:-5.5,mode:'work',heading:1.18,cargo:0},seconds,false);
+    extras[3].animate({x:68.5,z:-6.1,mode:'work',heading:1.18,cargo:0},seconds,false);
     // Residents keep to the two parallel lanes and turn at their ends.
     for(let i=1;i<=2;i++){
       const t=(seconds*(i===1?.78:.62)+i*9)%56;
@@ -252,5 +276,5 @@ export function createScene(container,{onPick,onPan}={}) {
     positionLabels();renderer.render(scene,camera);
   }
   return {render,rotate,zoom,projectActor,focusPlace,getFocusX:()=>target.x,reset(){target.set(0,0,-.5);angle=.30;zoomLevel=1;updateCamera();},
-    dispose(){observer.disconnect();renderer.dispose();canvas.remove();labels.remove();}};
+    dispose(){observer.disconnect();flag.geometry.dispose();flag.material.dispose();renderer.dispose();canvas.remove();labels.remove();}};
 }

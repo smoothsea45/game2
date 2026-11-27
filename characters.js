@@ -156,6 +156,29 @@ function paperLoad() {
   return p.mesh();
 }
 
+function barkBundle() {
+  const p = part();
+  // Long mulberry stems fan above the carrying frame; peeled tips expose pale wood.
+  for (let row = 0; row < 2; row++) {
+    for (let i = 0; i < 4; i++) {
+      const x = (i - 1.5) * .112 + row * .025;
+      const z = -.35 - row * .12;
+      const length = 1.13 + ((i * 3 + row) % 5) * .063;
+      const spread = (1.5 - i) * .086;
+      const base = .91;
+      p.taper(.72, 6, x, base + length / 2, z, .072, length, .063,
+        ['#885e3a','#a37447','#705439','#976741'][(row + i) % 4], -.08, 0, spread);
+      p.taper(.82, 6, x - Math.sin(spread) * length * .50, base + length - .04, z - .046,
+        .052, .11, .052, dye.hemp, -.08, 0, spread);
+    }
+  }
+  for (const y of [1.13, 1.56]) {
+    p.taper(1, 10, .01, y, -.413, .268, .067, .145, dye.straw);
+    p.taper(1, 10, .01, y + .074, -.413, .264, .031, .143, dye.bamboo);
+  }
+  return p.mesh().geometry;
+}
+
 export function makePerson(id) {
   const clothes = costumes[id] ?? costumes.resident;
   const group = new THREE.Group();
@@ -167,6 +190,9 @@ export function makePerson(id) {
   const leftLeg = createLeg(-1, clothes);
   const rightLeg = createLeg(1, clothes);
   const load = paperLoad();
+  const paper = load.geometry;
+  const bark = id === 'porter' ? barkBundle() : null;
+  load.name = 'cargo';
   load.visible = false;
   group.add(body);
   body.add(trunk, leftArm, rightArm, leftLeg, rightLeg, load);
@@ -178,6 +204,7 @@ export function makePerson(id) {
       group.position.set(actor.x, 0, actor.z);
       group.rotation.y = actor.heading || 0;
       load.visible = actor.cargo > 0;
+      if (bark && load.visible) load.geometry = actor.cargoItem === 'bark' ? bark : paper;
       const walk = actor.mode === 'walk';
       const working = actor.mode === 'work';
       const step = walk ? Math.sin(simSeconds * 6.8 + phase) : 0;

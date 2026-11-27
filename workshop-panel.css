@@ -1,0 +1,63 @@
+.workshop-panel {
+  display: grid;
+  gap: 8px;
+  color: var(--ink);
+}
+.workshop-panel .workshop-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.workshop-panel .workshop-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: 700 14px var(--serif);
+}
+.workshop-state::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #96876a;
+  border-radius: 50%;
+}
+.workshop-panel[data-running="true"] .workshop-state::before {background: #51795b}
+.workshop-panel button {
+  min-height: 36px;
+  padding: 5px 11px;
+  border: 1px solid #b7ae97;
+  border-radius: 3px;
+  background: #f1ead9;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.workshop-panel button:focus-visible {outline: 2px solid var(--copper); outline-offset: 1px}
+.workshop-panel button[aria-disabled="true"] {color: #736f64; background: #eee9da; cursor: default}
+.workshop-panel .workshop-toggle {background: var(--pine); color: #fff8e2; border-color: var(--pine)}
+.workshop-panel[data-running="true"] .workshop-toggle {background: #eee5d2; color: #653e2e; border-color: #bda58c}
+.workshop-panel .workshop-status {margin: 0; font-size: 12px}
+.workshop-panel dl {margin: 0}
+.workshop-balances {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 8px 0;
+  border-block: 1px solid var(--line);
+}
+.workshop-balances div {display: grid; gap: 2px; padding-inline: 10px}
+.workshop-balances div + div {border-left: 1px solid var(--line)}
+.workshop-panel dt {color: var(--muted); font-size: 11px}
+.workshop-panel dd {margin: 0}
+.workshop-balances dd {font: 700 18px var(--serif); font-variant-numeric: tabular-nums}
+.workshop-transfers {display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px}
+.workshop-panel .workshop-note {margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5}
+.workshop-rows div {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  gap: 9px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+}
+.workshop-rows dd {text-align: right; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere}

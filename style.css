@@ -253,3 +253,18 @@ dialog::backdrop {background:#16332ac2}
 .camera .view-place[aria-pressed=true] {background:#50694f;color:#ffe5a9}
 
 #ledger-open {color:var(--pine);background:none;border:1px solid var(--line);border-radius:2px;padding:3px 7px;font:inherit;cursor:pointer}
+
+.mission-tools {display:flex;gap:6px;margin-top:8px}
+.mission-tools button {border:1px solid #a69e79;background:transparent;color:#f2e7c9;border-radius:2px;padding:4px 10px;font:600 12px var(--serif)}
+.schedule-window {display:grid;gap:8px}
+#dialog-content .schedule-window p {margin:0}
+.schedule-time {font-weight:700;color:var(--pine);font-variant-numeric:tabular-nums}
+.schedule-choice {border-top:1px solid var(--line);padding-top:8px;display:grid;grid-template-columns:1fr auto;align-items:start;gap:3px 8px}
+.schedule-choice h3 {margin:0;font:700 15px var(--serif);color:var(--pine)}
+.schedule-choice p {grid-column:1;color:#515e4c}
+.schedule-choice button {grid-column:2;grid-row:1 / span 2;align-self:center}
+.schedule-window button {border:1px solid #687c60;background:#edf0dc;color:#294637;border-radius:3px;min-height:31px;padding:4px 9px;font:700 12px var(--serif)}
+.schedule-window button[disabled] {opacity:.7}
+.schedule-window [data-schedule=startOpportunity] {background:var(--pine);color:#f9f0d5}
+.schedule-window details {border-top:1px solid var(--line);padding-top:7px;color:#566451;font-size:12px}
+.schedule-window .schedule-outcome:empty {display:none}

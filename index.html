@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#183b35">
   <title>한성가록 · 한성과 양주</title>
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./workshop-panel.css">
 </head>
 <body>
 <header class="masthead">
@@ -44,6 +45,7 @@
     <aside class="desk" aria-label="가문 지휘">
       <section class="mission">
         <div class="mission-head"><h2><span data-icon="flag"></span> 첫 거래</h2><span id="goal-count"></span></div>
+        <div class="mission-tools"><button type="button" data-pocket="goal" aria-controls="book-dialog" aria-expanded="false">가주 일정</button><button type="button" data-pocket="workshop" aria-controls="book-dialog" aria-expanded="false">공방 운영</button></div>
         <p id="goal-text"></p><div class="goal-track" id="goal-track" aria-hidden="true"><i></i><i></i><i></i></div>
       </section>
       <section class="people">
@@ -60,7 +62,8 @@
     </aside>
   </div>
   <nav class="pocket-bar" aria-label="지도 도구">
-    <button type="button" data-pocket="goal" aria-label="목표 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="flag"></span><span>목표</span></button>
+    <button type="button" data-pocket="goal" aria-label="가주 일정 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="flag"></span><span>일정</span></button>
+    <button type="button" data-pocket="workshop" aria-label="공방 운영 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="sheet"></span><span>공방</span></button>
     <button type="button" data-pocket="stock" aria-label="재고 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="stall"></span><span>재고</span></button>
     <button type="button" data-pocket="log" aria-label="일지 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="feather"></span><span>일지</span></button>
     <button type="button" id="camera-open" aria-label="시점 조절" aria-expanded="false" aria-controls="camera-tools"><span data-icon="frame"></span><span>시점</span></button>

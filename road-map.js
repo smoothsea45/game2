@@ -1,5 +1,16 @@
 import {places,roads} from './simulation.mjs';
 
+// The plot and its street door are separate: the road endpoint stays navigable.
+export const yangjuPlot = {x:75.1,z:-6.7,w:5.1,d:6.7,signX:77.5,signZ:-6.3};
+const titleDeed = {
+  vacant:{state:'매물',cloth:'#bd9140',ink:'#705718'},
+  player:{state:'우리 가문',cloth:'#378473',ink:'#235a4e'},
+  rival:{state:'경쟁 가문',cloth:'#ab6252',ink:'#81483e'}
+};
+export function plotAppearance(owner){
+  return titleDeed[owner==='player'||owner==='rival'?owner:'vacant'];
+}
+
 // The road diagram still accepts orders on devices without a working WebGL context.
 export function makeRoadMap(mount,pick,onPan){
   mount.replaceChildren();
@@ -11,7 +22,7 @@ export function makeRoadMap(mount,pick,onPan){
   let angle=0,magnification=1,focus={x:0,z:0},hitBoxes=[],transform;
   const colors={master:'#315c4c',apprentice:'#ad6147',porter:'#606a8b',rival:'#825747'};
   const eastLimit=Math.max(...Object.values(places).map(p=>p.x))+10;
-  function terrain(){
+  function terrain(deed){
     // Draw quiet map symbols in world coordinates, underneath routes and labels.
     ctx.fillStyle='#a9b99a';
     for(const [x,z,w,d] of [[40,-14,10,7],[51,-14,12,7],[44,-6.3,9,3.4],[54,-6.3,11,3.4],[47,5,14,6],[62,5,8,6]]){
@@ -20,6 +31,15 @@ export function makeRoadMap(mount,pick,onPan){
         ctx.beginPath();ctx.moveTo(x+.35,row);ctx.lineTo(x+w-.35,row);ctx.stroke();
       }
     }
+    const parcel=yangjuPlot, left=parcel.x-parcel.w/2, north=parcel.z-parcel.d/2;
+    ctx.fillStyle='#c9b68f';ctx.fillRect(left,north,parcel.w,parcel.d);
+    ctx.strokeStyle=deed.ink;ctx.lineWidth=.16;ctx.setLineDash([.6,.24]);
+    ctx.strokeRect(left,north,parcel.w,parcel.d);ctx.setLineDash([]);
+    for(const x of [left,left+parcel.w])for(const z of [north,north+parcel.d]){
+      ctx.fillStyle='#6c5943';ctx.fillRect(x-.18,z-.18,.36,.36);
+    }
+    ctx.fillStyle=deed.cloth;ctx.beginPath();ctx.moveTo(parcel.signX,parcel.signZ);
+    ctx.lineTo(parcel.signX-1.35,parcel.signZ+.36);ctx.lineTo(parcel.signX,parcel.signZ+.76);ctx.fill();
     for(const [x,z,w,d,rural] of [
       [-21,-5,4.4,6.2,false],[5,-5,4.3,6.5,false],[21,4.5,4.5,7,false],[-21,5,4.5,6,false],
       [-9,-6,6,3,false],[-6,5,6,3,false],[8,5,6,3,false],[31,-5,5,3,false],
@@ -32,7 +52,7 @@ export function makeRoadMap(mount,pick,onPan){
       ctx.lineTo(l,t+d);ctx.moveTo(l+w,t);ctx.lineTo(x,t+.8);ctx.moveTo(l+w,t+d);ctx.lineTo(x,t+d-.8);ctx.stroke();
     }
   }
-  function render({actors,selectedId,followId}){
+  function render({actors,selectedId,followId,plotOwner=null,meetingAvailable=false}){
     const w=mount.clientWidth,h=mount.clientHeight,ratio=Math.min(window.devicePixelRatio||1,2);
     if(!w||!h)return;
     if(canvas.width!==Math.round(w*ratio)||canvas.height!==Math.round(h*ratio)){canvas.width=Math.round(w*ratio);canvas.height=Math.round(h*ratio);}
@@ -42,15 +62,20 @@ export function makeRoadMap(mount,pick,onPan){
     transform={scale,cx,sx,w,h};
     const project=p=>({x:w/2+((p.x-focus.x)*cx-(p.z-focus.z)*sx)*scale,y:h/2+((p.x-focus.x)*sx+(p.z-focus.z)*cx)*scale});
     ctx.setTransform(ratio,0,0,ratio,0,0);ctx.fillStyle='#d8d6b7';ctx.fillRect(0,0,w,h);
-    ctx.save();ctx.translate(w/2,h/2);ctx.scale(scale,scale);ctx.rotate(angle);ctx.translate(-focus.x,-focus.z);terrain();ctx.restore();
+    const deed=plotAppearance(plotOwner);
+    ctx.save();ctx.translate(w/2,h/2);ctx.scale(scale,scale);ctx.rotate(angle);ctx.translate(-focus.x,-focus.z);terrain(deed);ctx.restore();
     ctx.strokeStyle='#f6e8c7';ctx.lineWidth=Math.max(4,scale*1.2);ctx.lineCap='round';
     for(const [from,to] of roads){const a=project(from),b=project(to);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
     hitBoxes=[];
     for(const [id,p] of Object.entries(places)){
-      const pos=project(p),dir=p.z<0?-1:1,cy=pos.y+dir*25;
-      ctx.font='bold 12px serif';const width=ctx.measureText(p.name).width+14;
-      ctx.fillStyle='#f8f2de';ctx.fillRect(pos.x-width/2,cy-10,width,20);ctx.strokeStyle='#676f58';ctx.lineWidth=1;ctx.strokeRect(pos.x-width/2,cy-10,width,20);
-      ctx.fillStyle='#2d4235';ctx.textAlign='center';ctx.fillText(p.name,pos.x,cy+4);
+      const parcel=id==='plot',meeting=id==='market'&&meetingAvailable;
+      let title=p.name;
+      if(parcel)title+=' · '+deed.state;
+      if(meeting)title+=' · 서책상 면담';
+      const pos=project(parcel?yangjuPlot:p),dir=p.z<0?-1:1,cy=pos.y+dir*25;
+      ctx.font='bold 12px serif';const width=ctx.measureText(title).width+14;
+      ctx.fillStyle=meeting?'#455773':'#f8f2de';ctx.fillRect(pos.x-width/2,cy-10,width,20);ctx.strokeStyle=parcel?deed.ink:'#676f58';ctx.lineWidth=1;ctx.strokeRect(pos.x-width/2,cy-10,width,20);
+      ctx.fillStyle=meeting?'#fff8e7':parcel?deed.ink:'#2d4235';ctx.textAlign='center';ctx.fillText(title,pos.x,cy+4);
       hitBoxes.push({type:'place',id,x:p.x,z:p.z,left:pos.x-width/2,right:pos.x+width/2,top:cy-12,bottom:cy+12});
     }
     for(const a of actors){
@@ -64,7 +89,11 @@ export function makeRoadMap(mount,pick,onPan){
     const hit=hitBoxes.slice().reverse().find(item=>x>=item.left&&x<=item.right&&y>=item.top&&y<=item.bottom);
     if(hit){pick(hit,e.button);return;}
     const {w,h,cx,sx,scale}=transform,dx=(x-w/2)/scale,dy=(y-h/2)/scale;
-    pick({type:'ground',x:focus.x+cx*dx+sx*dy,z:focus.z-sx*dx+cx*dy},e.button);
+    const ground={x:focus.x+cx*dx+sx*dy,z:focus.z-sx*dx+cx*dy};
+    if(places.plot && Math.abs(ground.x-yangjuPlot.x)<=yangjuPlot.w/2 && Math.abs(ground.z-yangjuPlot.z)<=yangjuPlot.d/2){
+      pick({type:'place',id:'plot',x:places.plot.x,z:places.plot.z},e.button);return;
+    }
+    pick({type:'ground',...ground},e.button);
   }
   let drag=null;
   canvas.onpointerdown=e=>{
