@@ -7,7 +7,8 @@ const roofs = {
   home:{x:4.9,z:-5.15,w:4.8,d:7},
   workshop:{x:-20.8,z:-5,w:5,d:6.8},
   market:{x:21.3,z:4.5,w:4.9,d:7.8},
-  rival:{x:-21,z:5,w:5,d:6.4}
+  rival:{x:-21,z:5,w:5,d:6.4},
+  yangju:{x:85,z:5.7,w:5.2,d:7.1}
 };
 const labelStyles = {
   position:'absolute',whiteSpace:'nowrap',display:'block',margin:'0',padding:'3px 6px',
@@ -25,7 +26,7 @@ export function createScene(container,{onPick,onPan}={}) {
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
   const canvas=renderer.domElement;
-  canvas.setAttribute('aria-label','한성 3D 거리. 인물과 건물을 선택하거나 길을 눌러 이동할 수 있습니다.');
+  canvas.setAttribute('aria-label','한성과 양주를 잇는 3D 거리. 인물과 건물을 선택하거나 길을 눌러 이동할 수 있습니다.');
   Object.assign(canvas.style,{display:'block',width:'100%',height:'100%',touchAction:'none',cursor:'grab'});
   container.appendChild(canvas);
   const scene=new T.Scene();
@@ -36,12 +37,24 @@ export function createScene(container,{onPick,onPan}={}) {
   const sun=new T.DirectionalLight('#ffedc5',2.30);
   sun.position.set(-24,42,-16);sun.castShadow=true;
   Object.assign(sun.shadow.camera,{left:-37,right:37,top:32,bottom:-32,near:1,far:115});
+  sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.mapSize.set(1536,1536);sun.shadow.bias=-.00045;sun.shadow.normalBias=.032;
   scene.add(fill,sun,sun.target,village());
   const peopleModels=new Map(Object.keys(people).map(id=>[id,makePerson(id)]));
   for(const m of peopleModels.values())scene.add(m.group);
 
-  const extras=[makePerson('vendor'),makePerson('resident'),makePerson('resident')];
+  // A roof can hide a traveler when the player orbits the camera. Only the
+  // occluded part of this location marker is drawn, so open-road figures stay natural.
+  const occlusionGeometry=new T.SphereGeometry(.22,8,5);
+  const occlusionMaterial=new T.MeshBasicMaterial({
+    color:'#efc777',depthFunc:T.GreaterDepth,depthWrite:false,transparent:true,opacity:.93
+  });
+  for(const person of peopleModels.values()){
+    const marker=new T.Mesh(occlusionGeometry,occlusionMaterial);
+    marker.position.y=2.28;marker.renderOrder=2;person.group.add(marker);
+  }
+
+  const extras=[makePerson('vendor'),makePerson('resident'),makePerson('resident'),makePerson('vendor')];
   for(const person of extras)scene.add(person.group);
   const circle=new T.Mesh(new T.RingGeometry(.59,.76,36),
     new T.MeshBasicMaterial({color:'#db9d3b',side:T.DoubleSide,depthWrite:false}));
@@ -65,11 +78,16 @@ export function createScene(container,{onPick,onPan}={}) {
 
   const target=new T.Vector3(0,0,-.5),screen=new T.Vector3(),hitPoint=new T.Vector3(),pointer=new T.Vector2();
   const cast=new T.Raycaster(),ground=new T.Plane(new T.Vector3(0,1,0),0);
-  const rayBoxes=Object.entries(roofs).map(([id,{x,z,w,d}])=>[id,new T.Box3(
+  const rayBoxes=Object.entries(roofs).filter(([id])=>places[id]).map(([id,{x,z,w,d}])=>[id,new T.Box3(
     new T.Vector3(x-w/2,0,z-d/2),new T.Vector3(x+w/2,3.8,z+d/2))]);
   let width=1,height=1,zoomLevel=1,angle=.30,frustum=35,currentActors=[],selected=null;
   let hideActorLabel=false;
-  let inertialFrame=false;
+  let inertialFrame=false,previousFollow=null;
+  const eastLimit=Math.max(...Object.values(places).map(p=>p.x))+10;
+  function focusPlace(id){
+    const point=places[id];if(!point)return;
+    target.set(point.x,0,point.z);inertialFrame=true;updateCamera();
+  }
   function updateCamera(){
     const aspect=width/height;
     // Fit all four properties, while keeping narrower phone screens useful for close-ups.
@@ -80,6 +98,9 @@ export function createScene(container,{onPick,onPan}={}) {
     camera.position.set(target.x+Math.sin(angle)*Math.cos(elevation)*92,
       Math.sin(elevation)*92,target.z+Math.cos(angle)*Math.cos(elevation)*92);
     camera.lookAt(target);camera.updateProjectionMatrix();camera.updateMatrixWorld(true);
+    // Track both settlements with a local shadow window of constant resolution.
+    const lightX=Math.round(target.x*4)/4,lightZ=Math.round(target.z*4)/4;
+    sun.target.position.set(lightX,0,lightZ);sun.position.set(lightX-24,42,lightZ-16);
   }
   function resize(){
     width=Math.max(1,container.clientWidth);height=Math.max(1,container.clientHeight);
@@ -126,7 +147,7 @@ export function createScene(container,{onPick,onPan}={}) {
     for(const [id,{node}] of Object.entries(signs)){
       // At phone overview scale, leave the rival roof pickable without its extra placard.
       if(id==='rival'&&height<520&&zoomLevel<1.18){node.style.visibility='hidden';continue;}
-      const {x,z}=roofs[id];
+      const {x,z}=roofs[id]??places[id];
       positionLabel(node,projected(x,4.25,z),places[id].name.length*11+14,occupied,false);
     }
   }
@@ -157,7 +178,7 @@ export function createScene(container,{onPick,onPan}={}) {
   let gesture=null,start=null,dragged=false;
   function pan(dx,dy){
     const scale=frustum/height,s= Math.sin(angle),c=Math.cos(angle);
-    target.x=clamp(target.x-scale*(c*dx+s*dy/Math.sin(elevation)),-30,30);
+    target.x=clamp(target.x-scale*(c*dx+s*dy/Math.sin(elevation)),-30,eastLimit);
     target.z=clamp(target.z-scale*(-s*dx+c*dy/Math.sin(elevation)),-17,17);
     inertialFrame=true;onPan?.();updateCamera();
   }
@@ -209,11 +230,12 @@ export function createScene(container,{onPick,onPan}={}) {
     const active=actors.find(a=>a.id===selectedId),follow=actors.find(a=>a.id===followId);
     const now=performance.now(),dt=Math.min(.15,(now-lastUpdate)/1000);lastUpdate=now;
     if(follow&&!inertialFrame) {
-      const ease=1-Math.exp(-dt*7);target.x+=(follow.x-target.x)*ease;target.z+=(follow.z-target.z)*ease;updateCamera();
+      const ease=follow.id===previousFollow ? 1-Math.exp(-dt*7) : 1;target.x+=(follow.x-target.x)*ease;target.z+=(follow.z-target.z)*ease;updateCamera();
     }
-    inertialFrame=false;
+    previousFollow=inertialFrame?null:(follow?.id??null);inertialFrame=false;
     if(active){circle.visible=true;circle.position.set(active.x,.068,active.z);}else circle.visible=false;
     extras[0].animate({x:18.3,z:-3.2,mode:'work',heading:-.9,cargo:0},seconds,false);
+    extras[3].animate({x:75.4,z:-5.5,mode:'work',heading:1.18,cargo:0},seconds,false);
     // Residents keep to the two parallel lanes and turn at their ends.
     for(let i=1;i<=2;i++){
       const t=(seconds*(i===1?.78:.62)+i*9)%56;
@@ -229,6 +251,6 @@ export function createScene(container,{onPick,onPan}={}) {
     }
     positionLabels();renderer.render(scene,camera);
   }
-  return {render,rotate,zoom,projectActor,reset(){target.set(0,0,-.5);angle=.30;zoomLevel=1;updateCamera();},
+  return {render,rotate,zoom,projectActor,focusPlace,getFocusX:()=>target.x,reset(){target.set(0,0,-.5);angle=.30;zoomLevel=1;updateCamera();},
     dispose(){observer.disconnect();renderer.dispose();canvas.remove();labels.remove();}};
 }

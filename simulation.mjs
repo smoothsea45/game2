@@ -4,7 +4,8 @@ export const places = {
   home: {name: '본가', x: 0, z: -5},
   workshop: {name: '한지 공방', x: -16, z: -4},
   market: {name: '종로 시전', x: 16, z: 4},
-  rival: {name: '경쟁 지물전', x: -16, z: 5}
+  rival: {name: '경쟁 지물전', x: -16, z: 5},
+  yangju: {name: '양주 장터', x: 79, z: 4}
 };
 export const people = {
   master: {name: '윤서진', role: '가주'},
@@ -16,8 +17,15 @@ export const roads = [
   [point(-23, 0), point(23, 0)],
   [point(-16, -10), point(16, -10)],
   [point(-16, 9), point(16, 9)],
-  ...[-16, 0, 16].map(x => [point(x, -10), point(x, 9)])
+  ...[-16, 0, 16].map(x => [point(x, -10), point(x, 9)]),
+  [point(23, 0), point(89, 0)],
+  [point(79, -8), point(79, 9)]
 ];
+export function districtName(x) {
+  if (x <= 28) return '한성';
+  if (x < 67) return '한성·양주 사이';
+  return '양주';
+}
 const distance = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
 function projection(p, [a, b]) {
@@ -40,7 +48,10 @@ function doorstep(id, place) {
   const p = places[place];
   return point(p.x, p.z+offsets[id]);
 }
-const intersections = [-16,0,16].flatMap(x=>[-10,0,9].map(z=>point(x,z)));
+const intersections = [
+  ...[-16,0,16].flatMap(x=>[-10,0,9].map(z=>point(x,z))),
+  point(23,0), point(79,0)
+];
 function route(from, to) {
   const points = [point(from.x,from.z), to, ...intersections];
   const graph = points.map(()=>[]);
@@ -71,6 +82,9 @@ function route(from, to) {
   for(let i=1;i!==0;i=previous[i])result.unshift(points[i]);
   return result;
 }
+import {bins, moveGoods, quantity, validInventory} from './inventory.mjs';
+export {inventoryAt, inventoryRows} from './inventory.mjs';
+
 export function clock(s) {
   const minutes=7*60+Math.floor(s.time*4);
   const day=Math.floor(minutes/1440)+1, hour=Math.floor(minutes/60)%24, minute=minutes%60;
@@ -83,7 +97,7 @@ function note(s,text) {
 }
 function actor(id,at) {
   return {id,...doorstep(id,at),at,target:null,heading:Math.PI/4,mode:'idle',task:'idle',
-    action:'명령 대기',cargo:0,remaining:0,duration:0,path:[]};
+    action:'명령 대기',remaining:0,duration:0,path:[]};
 }
 function wait(a,task,action,seconds=0,mode='idle') {
   Object.assign(a,{mode,task,action,path:[],target:null,remaining:seconds,duration:seconds});
@@ -98,32 +112,91 @@ export function fresh(){
   const agents=[actor('master','home'),actor('apprentice','workshop'),actor('porter','home'),actor('rival','rival')];
   const rival=agents[3];
   wait(rival,'rivalWork','팔 종이를 꾸리는 중',10,'work');
-  return {version:1,time:0,speed:1,agents,grain:18,bark:4,paper:0,stock:0,supply:4,sold:0,
+  const state={version:2,time:0,speed:1,agents,inventory:[],grain:18,sold:0,
     crafted:0, delivered:0, rivalSales:0, contractDay:0, log:[{time:0,text:'한성의 새벽 장이 섰다. 오늘 첫 한지를 지어 내다 팔자.'}]};
+  moveGoods(state,null,bins.bark,4);
+  moveGoods(state,null,bins.market,4);
+  moveGoods(state,null,bins.rivalShop,6);
+  return inventoryViews(state);
 }
-const tasks=new Set(['idle','move','toCraft','craft','toPickup','waitPaper','delivery','rivalWork','rivalDeliver','rivalReturn','labor']);
-const counts=['grain','bark','paper','stock','supply','sold','crafted','delivered','rivalSales','contractDay'];
+const taskModes={
+  idle:'idle',move:'walk',toCraft:'walk',craft:'work',toPickup:'walk',waitPaper:'idle',
+  delivery:'walk',rivalWork:'work',rivalDeliver:'walk',rivalReturn:'walk',labor:'work'
+};
+const roleTasks={
+  master:['idle','move','labor'],apprentice:['idle','move','toCraft','craft'],
+  porter:['idle','move','toPickup','waitPaper','delivery'],rival:['rivalWork','rivalDeliver','rivalReturn']
+};
+const counts=['grain','sold','crafted','delivered','rivalSales','contractDay'];
 const isCount=n=>Number.isSafeInteger(n)&&n>=0;
 const finitePoint=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.z);
 function onStreet(p) {
   return finitePoint(p)&&distance(p,streetPoint(p))<0.001;
 }
+const aliases={bark:bins.bark,paper:bins.workshop,stock:bins.stall,supply:bins.market};
+function inventoryViews(s) {
+  // Compatibility for renderers and existing simulation callers. Only the
+  // inventory rows are enumerable, so a save never contains a second balance.
+  for(const [key,bin] of Object.entries(aliases)) {
+    Object.defineProperty(s,key,{get:()=>quantity(s,bin)});
+  }
+  for(const a of s.agents) {
+    const container=a.id==='porter'?bins.porter:a.id==='rival'?bins.rival:null;
+    Object.defineProperty(a,'cargo',{get:()=>container?quantity(s,container):0});
+  }
+  return s;
+}
+function hasCraftOrder(s) {
+  return s.agents.some(a=>a.task==='toCraft'||a.task==='craft');
+}
+function migrateInventory(s) {
+  s.inventory=[];
+  for(const [key,bin] of Object.entries(aliases)) {
+    moveGoods(s,null,bin,s[key]);
+    delete s[key];
+  }
+  for(const a of s.agents) {
+    if(a.id==='porter')moveGoods(s,null,bins.porter,a.cargo);
+    if(a.id==='rival'){
+      moveGoods(s,null,bins.rival,a.cargo);
+      if(a.task==='rivalWork')moveGoods(s,null,bins.rivalShop,6);
+    }
+    delete a.cargo;
+  }
+  // V1 removed the bundle at assignment without recording its reservation.
+  if(hasCraftOrder(s))moveGoods(s,null,bins.reservedBark,1);
+  s.version=2;
+}
+function validOrders(s) {
+  const porter=s.agents.find(a=>a.id==='porter');
+  const rival=s.agents.find(a=>a.id==='rival');
+  const load=quantity(s,bins.porter);
+  return quantity(s,bins.reservedBark)===(hasCraftOrder(s)?1:0)
+    && load<=4 && (porter.task!=='delivery'||load>0)
+    && (!['toPickup','waitPaper'].includes(porter.task)||load===0)
+    && quantity(s,bins.rival)===(rival.task==='rivalDeliver'?6:0)
+    && quantity(s,bins.rivalShop)===(rival.task==='rivalWork'?6:0);
+}
 export function loadGame(text) {
   try {
     const s=JSON.parse(text);
-    if (s?.version!==1||!Number.isFinite(s.time)||s.time<0||![0,1,2,4].includes(s.speed)||
+    if (![1,2].includes(s?.version)||!Number.isFinite(s.time)||s.time<0||![0,1,2,4].includes(s.speed)||
       !counts.every(k=>isCount(s[k]))||!Array.isArray(s.agents)||s.agents.length!==4||
       !Array.isArray(s.log)||!s.log.every(v=>Number.isFinite(v.time)&&typeof v.text==='string')) return null;
+    const legacy=s.version===1;
+    if(legacy?!Object.keys(aliases).every(key=>isCount(s[key])):!validInventory(s.inventory))return null;
     const ids=new Set();
     for(const a of s.agents) {
       if(!Object.hasOwn(people,a.id)||ids.has(a.id)||!onStreet(a)||!Array.isArray(a.path)||
-        !a.path.every(onStreet)||!tasks.has(a.task)||!['walk','idle','work'].includes(a.mode)||
+        !a.path.every(onStreet)||!roleTasks[a.id].includes(a.task)||taskModes[a.task]!==a.mode||
         ![a.at,a.target].every(v=>v===null||Object.hasOwn(places,v))||typeof a.action!=='string'||
         !Number.isFinite(a.remaining)||!Number.isFinite(a.duration)||a.remaining<0||a.duration<0||
-        !isCount(a.cargo)||!Number.isFinite(a.heading))return null;
+        (legacy&&(!isCount(a.cargo)||(!['porter','rival'].includes(a.id)&&a.cargo!==0)))||
+        !Number.isFinite(a.heading))return null;
       ids.add(a.id);
     }
-    return s;
+    if(legacy)migrateInventory(s);
+    return validOrders(s)?inventoryViews(s):null;
   } catch {return null;}
 }
 function available(a) {return a.task==='idle'||a.task==='move'||a.task==='waitPaper';}
@@ -135,28 +208,36 @@ function complete(s,a) {
     case 'toCraft':
       wait(a,'craft','발로 한지를 뜨는 중',9,'work');break;
     case 'craft':
-      s.paper+=4;s.crafted+=4;
+      moveGoods(s,bins.reservedBark,null,1);
+      moveGoods(s,null,bins.workshop,4);
+      s.crafted+=4;
       note(s,'분이가 한지 4장을 공방 선반에 올렸다.');
       wait(a,'idle','한지 한 묶음 완성');break;
     case 'toPickup':
     case 'waitPaper':
       if(!s.paper){wait(a,'waitPaper','공방에서 한지를 기다리는 중');break;}
-      a.cargo=Math.min(4,s.paper);s.paper-=a.cargo;
+      moveGoods(s,bins.workshop,bins.porter,Math.min(4,s.paper));
       note(s,'돌석이 공방에서 한지 '+a.cargo+'장을 지고 출발했다.');
       go(a,'market','delivery','시전으로 한지 운반 중');break;
-    case 'delivery':
-      s.stock+=a.cargo;s.delivered+=a.cargo;
-      note(s,'돌석이 시전 판매대에 한지 '+a.cargo+'장을 내려놓았다.');
-      a.cargo=0;wait(a,'idle','시전에 짐을 내려놓음');break;
+    case 'delivery': {
+      const delivered=a.cargo;
+      moveGoods(s,bins.porter,bins.stall,delivered);
+      s.delivered+=delivered;
+      note(s,'돌석이 시전 판매대에 한지 '+delivered+'장을 내려놓았다.');
+      wait(a,'idle','시전에 짐을 내려놓음');break;
+    }
     case 'rivalWork':
-      a.cargo=6;go(a,'market','rivalDeliver','이웃 점포의 한지를 싣고 장으로');break;
+      moveGoods(s,bins.rivalShop,bins.rival,6);
+      go(a,'market','rivalDeliver','이웃 점포의 한지를 싣고 장으로');break;
     case 'rivalDeliver': {
       const oldPrice=price(s);
-      s.supply+=a.cargo;s.rivalSales++;a.cargo=0;
+      moveGoods(s,bins.rival,bins.market,a.cargo);
+      s.rivalSales++;
       note(s,'경쟁 상인이 한지 6장을 풀었다. 시세 '+oldPrice+'말 → '+price(s)+'말.');
       go(a,'rival','rivalReturn','가게로 돌아가는 중');break;
     }
     case 'rivalReturn':
+      moveGoods(s,null,bins.rivalShop,6);
       wait(a,'rivalWork','다음 장에 낼 종이를 꾸리는 중',21,'work');break;
     case 'labor':
       s.grain+=3;note(s,'가주가 장터 품삯으로 곡식 3말을 받았다.');
@@ -195,7 +276,7 @@ export function tick(s,seconds){
   // Bounded event steps keep concurrent arrivals and market updates in chronological order at 4×.
   while(left>0.000001){
     const delta=Math.min(left,0.25),oldTime=s.time;left-=delta;s.time+=delta;
-    if(Math.floor(oldTime/9)<Math.floor(s.time/9))s.supply=Math.max(0,s.supply-1);
+    if(Math.floor(oldTime/9)<Math.floor(s.time/9)&&s.supply>0)moveGoods(s,bins.market,null,1);
     for(const a of s.agents)progressActor(s,a,delta);
   }
 }
@@ -203,8 +284,9 @@ const result = (ok,message) => ({ok,message});
 function choice(id,label,detail,enabled) {return {id,label,detail,enabled};}
 export function options(s,id) {
   const a=s.agents.find(person=>person.id===id);if(!a||id==='rival')return [];
-  if(id==='apprentice')return [choice('produce','한지 뜨기','공방에서 닥 1묶음 → 한지 4장 · 작업 9초',available(a)&&s.bark>0)];
-  if(id==='porter')return [choice('haul','한지 운송','공방에서 최대 4장을 지고 시전으로 · 재고가 없으면 대기',available(a)&&a.task!=='waitPaper')];
+  const cancel=a.task==='idle'?[]:[choice('cancel','명령 중단',cancelDetail(a),true)];
+  if(id==='apprentice')return [...cancel,choice('produce','한지 뜨기','공방에서 닥 1묶음 → 한지 4장 · 작업 9초',available(a)&&s.bark>0)];
+  if(id==='porter')return [...cancel,choice('haul',a.cargo?'운송 재개':'한지 운송',a.cargo?'지닌 한지 '+a.cargo+'장을 시전 판매대에 운반':'공방에서 최대 4장을 지고 시전으로 · 재고가 없으면 대기',available(a)&&a.task!=='waitPaper')];
   const atShop=parked(a,'workshop'),atMarket=parked(a,'market'),quantity=Math.min(4,s.stock);
   const day=clock(s).day;
   const choices=[
@@ -213,7 +295,25 @@ export function options(s,id) {
     choice('labor','장터 품일','시전에서 6초 일하고 곡식 3말 받기',atMarket)
   ];
   if(day>=2)choices.push(choice('contract','관아 주문 납품',s.contractDay===day?'오늘 주문 납품 완료':'시전에서 한지 6장 납품 · 곡식 48말',atMarket&&s.stock>=6&&s.contractDay!==day));
-  return choices;
+  return [...cancel,...choices];
+}
+function cancelDetail(a){
+  if(a.task==='craft'||a.task==='toCraft')return '중단하면 작업용 닥 1묶음을 공방 재고로 돌립니다.';
+  if(a.cargo)return '이 자리에서 멈춥니다. 한지 '+a.cargo+'장은 돌석이 보관합니다.';
+  if(a.task==='labor')return '품일을 중단합니다. 끝내기 전에는 품삯을 받지 않습니다.';
+  return '현재 명령을 중단하고 이 자리에서 기다립니다.';
+}
+function cancelOrder(s,a){
+  let message='명령을 중단하고 이 자리에서 기다립니다.';
+  if(a.task==='craft'||a.task==='toCraft'){
+    moveGoods(s,bins.reservedBark,bins.bark,1);
+    message='작업을 중단하고 닥 1묶음을 재고로 돌렸습니다.';
+  }else if(a.cargo){
+    message='한지 '+a.cargo+'장을 보관한 채 멈췄습니다.';
+  }
+  wait(a,'idle',a.cargo?'짐을 지고 운송 지시 대기':'명령 대기');
+  note(s,people[a.id].name+' · '+message);
+  return result(true,message);
 }
 export function command(s,id,cmd,target) {
   const a=s.agents.find(person=>person.id===id);
@@ -228,23 +328,27 @@ export function command(s,id,cmd,target) {
   const option=options(s,id).find(o=>o.id===cmd);
   if(!option?.enabled)return result(false,option?option.detail:'이 인물에게 맞는 명령을 선택하세요.');
   switch(cmd){
+    case 'cancel':
+      return cancelOrder(s,a);
     case 'produce':
-      // Reserve input at assignment, so a saved or repeated order cannot spend it twice.
-      s.bark--;
-      go(a,'workshop','toCraft','공방으로 출근 중');break;
+      go(a,'workshop','toCraft','공방으로 출근 중');
+      moveGoods(s,bins.bark,bins.reservedBark,1);break;
     case 'haul':
-      go(a,'workshop','toPickup','공방으로 짐을 받으러 가는 중');break;
+      if(a.cargo)go(a,'market','delivery','시전으로 한지 운반 중');
+      else go(a,'workshop','toPickup','공방으로 짐을 받으러 가는 중');
+      break;
     case 'buy':
-      s.grain-=5;s.bark+=3;note(s,'가주가 공방에서 닥 3묶음을 5말에 들였다.');break;
+      moveGoods(s,null,bins.bark,3);s.grain-=5;
+      note(s,'가주가 공방에서 닥 3묶음을 5말에 들였다.');break;
     case 'sell':{
       const count=Math.min(4,s.stock),value=count*price(s);
-      s.stock-=count;s.sold+=count;s.supply+=count;s.grain+=value;
+      moveGoods(s,bins.stall,bins.market,count);s.sold+=count;s.grain+=value;
       note(s,'시전에서 한지 '+count+'장을 팔아 곡식 '+value+'말을 받았다.');break;
     }
     case 'labor':
       wait(a,'labor','시전 장부 정리를 돕는 중',6,'work');break;
     case 'contract':
-      s.stock-=6;s.sold+=6;s.grain+=48;s.contractDay=clock(s).day;
+      moveGoods(s,bins.stall,bins.office,6);s.sold+=6;s.grain+=48;s.contractDay=clock(s).day;
       note(s,'관아에 한지 6장을 납품하고 곡식 48말을 받았다.');break;
   }
   return result(true,option.label+' · '+(a.mode==='idle'?'완료':'지시함'));

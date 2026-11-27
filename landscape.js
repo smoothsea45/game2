@@ -111,7 +111,7 @@ export function village() {
       q.scale.set(.3,.23,.34);group.add(q);
     }
   }
-  // The road system and sim use precisely the same six street centrelines.
+  // Draw the street centerlines used for pathfinding, including the eastern road.
   box(0,-.23,0,310,.3,300,'#b8bc92');
   for(const s of roads) {
     const [a,b]=s;
@@ -182,10 +182,65 @@ export function village() {
   for(let i=0;i<95;i++) {
     const x=random()*106-53,z=random()*76-45;
     if(x>-26&&x<26&&z>-13&&z<11)continue;
-    if(Math.abs(x-channelX(z))<2.4)continue;
+    if(Math.abs(x-channelX(z))<2.4 || (x>23 && Math.abs(z)<4))continue;
     if(i%3===0)pine(x,z,2.7+random()*2.6);
     else brush(x,.24,z,.45+random(),.52+random()*.75,.46+random(),colors[i%4]);
   }
+  // Bunds divide the rice paddies; seedlings and shallow water catch the hill light.
+  function paddy(x,z,w,d,tone) {
+    box(x,-.03,z,w,.13,d,'#a99c71');
+    box(x,.041,z,w-.44,.025,d-.44,tone);
+    for(let row=0;row<Math.floor(d/.9);row++){
+      const pz=z-d/2+.55+row*.9;
+      for(let col=0;col<Math.floor(w/1.25);col++){
+        const px=x-w/2+.74+col*1.25;
+        brush(px,.13,pz,.24,.19,.09,row%2?'#919e63':'#9aaa70');
+      }
+    }
+  }
+  for(const [x,z,w,d,tone] of [
+    [46,-7,10,6,'#9db1a0'],[57,-7,10.5,6,'#a6b49a'],
+    [48,-14.4,14,7,'#a3b6a1'],[61,-14.4,10,7,'#9cb1a1'],
+    [52,9,12,7,'#a7b395'],[64,9,10.6,7,'#a6b298'],
+    [91,-12,9,6,'#a2afa0']
+  ])paddy(x,z,w,d,tone);
+  // Rain cap and carved directions on the wayside post at the end of the city street.
+  function marker(x,z) {
+    box(x,1.12,z,.20,2.24,.20,'#79563b');
+    box(x,2.14,z,1.65,.30,.14,'#c8ae7b');
+    const arrow=box(x+.84,2.14,z,.22,.22,.14,'#c8ae7b');arrow.rotation.z=-Math.PI/4;
+    for(const offset of [-.44,-.18,.08,.34])
+      box(x+offset,2.13,z+.077,.095,.12,.018,'#66563e');
+    box(x,2.31,z,.34,.12,.31,'#584b3f');
+  }
+  marker(26.5,-2.15);marker(74,-2.15);
+  for(const [x,z,h] of [[39,-6,3.8],[45,13.8,3.5],[65,-8,4.2],[70,8.4,3.9],
+      [96,-9,5.3],[93,7.5,4.5],[84,-14,4],[71,-14,4.1]])pine(x,z,h);
+  for(const [x,z] of [[41,-3.2],[65,3.4],[70,-4.0],[95,6.2]])rock(x,z,.56);
+  // A rural grain market. Separate barn, thatched inn, baskets and tied rice sheaves
+  // contrast with the packed tiled shops in Hanseong; both approaches remain clear.
+  yard(85,5.7,7.7,8.5);
+  roofed(85,5.7,6.4,4.4,'cottage',-Math.PI/2);
+  yard(83.8,-6.9,8.8,5.5);
+  roofed(83.8,-7.4,6.6,3.8,'cottage');
+  roofed(93.4,1.4,5.4,3.5,'cottage',-.10);
+  fabricStall(75.3,-4.6,.04,'#b99855');
+  fabricStall(72.4,-6.4,-Math.PI/2,'#829d88');
+  fabricStall(84.2,10.5,Math.PI,'#aa7755');
+  // Narrowing haystacks, tied with straw rope, gathered for storage.
+  const straw=shape('sheaf',()=>new T.ConeGeometry(1,1,8));
+  for(const [x,z,s] of [[87.8,-4.4,1.2],[89.1,-4.8,1],[87.8,-6.1,.9],[92,4,.72],[85.6,9.1,.65]]) {
+    add(straw,'#c5a467',x,.74*s,z,.70*s,1.48*s,.70*s);
+    add(cylinder,'#947a4f',x,.64*s,z,.42*s,.065,.42*s);
+  }
+  fence(89.3,5.6,4.1,false);
+  jar(82.1,8.1,1);jar(82.7,8.6,.8);
+  crate(82.4,3.7);crate(83.5,3.7);
+  // A freestanding indigo market banner can be seen over the roadside awnings.
+  stem([81.5,0,1.65],[81.5,4.05,1.65],.075,'#7b644c');
+  box(82.03,3.96,1.65,1.18,.075,.08,'#82694a');
+  box(82.05,3.2,1.65,.90,1.45,.048,'#607f83');
+  box(82.05,2.56,1.65,.90,.12,.053,'#c5b98f');
   // Backdrop ridges have continuous sloping facets rather than repeated cone peaks.
   function ridge(z0,width,heights,col) {
     const verts=[],colors=[];

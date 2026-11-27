@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "time": 11,
+  "speed": 1,
+  "agents": [
+    {
+      "id": "master",
+      "x": 0,
+      "z": -5,
+      "at": "home",
+      "target": null,
+      "heading": 0.7853981633974483,
+      "mode": "idle",
+      "task": "idle",
+      "action": "명령 대기",
+      "cargo": 0,
+      "remaining": 0,
+      "duration": 0,
+      "path": []
+    },
+    {
+      "id": "apprentice",
+      "x": -16,
+      "z": -4.8,
+      "at": "workshop",
+      "target": null,
+      "heading": 0.7853981633974483,
+      "mode": "work",
+      "task": "craft",
+      "action": "발로 한지를 뜨는 중",
+      "cargo": 0,
+      "remaining": 7,
+      "duration": 9,
+      "path": []
+    },
+    {
+      "id": "porter",
+      "x": -15.091176470588241,
+      "z": 0,
+      "at": null,
+      "target": "market",
+      "heading": 1.5707963267948966,
+      "mode": "walk",
+      "task": "delivery",
+      "action": "시전으로 한지 운반 중",
+      "cargo": 4,
+      "remaining": 0,
+      "duration": 0,
+      "path": [
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 5.1
+        }
+      ]
+    },
+    {
+      "id": "rival",
+      "x": -16,
+      "z": 1.95,
+      "at": null,
+      "target": "market",
+      "heading": 3.141592653589793,
+      "mode": "walk",
+      "task": "rivalDeliver",
+      "action": "이웃 점포의 한지를 싣고 장으로",
+      "cargo": 6,
+      "remaining": 0,
+      "duration": 0,
+      "path": [
+        {
+          "x": -16,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 0
+        },
+        {
+          "x": 16,
+          "z": 2.8
+        }
+      ]
+    }
+  ],
+  "grain": 18,
+  "bark": 2,
+  "paper": 0,
+  "stock": 0,
+  "supply": 3,
+  "sold": 0,
+  "crafted": 4,
+  "delivered": 0,
+  "rivalSales": 0,
+  "contractDay": 0,
+  "log": [
+    {
+      "time": 9,
+      "text": "돌석이 공방에서 한지 4장을 지고 출발했다."
+    },
+    {
+      "time": 9,
+      "text": "분이가 한지 4장을 공방 선반에 올렸다."
+    },
+    {
+      "time": 0,
+      "text": "한성의 새벽 장이 섰다. 오늘 첫 한지를 지어 내다 팔자."
+    }
+  ]
+}

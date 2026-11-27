@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#183b35">
-  <title>한성가록 · 운종가의 하루</title>
+  <title>한성가록 · 한성과 양주</title>
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
 <header class="masthead">
-  <div class="brand"><span class="seal" aria-hidden="true">漢城<br>家錄</span><div><h1>한성가록</h1><p class="brand-place">한성부 · 운종가</p></div></div>
+  <div class="brand"><span class="seal" aria-hidden="true">漢城<br>家錄</span><div><h1>한성가록</h1><p class="brand-place" id="district-brand">한성부 · 운종가</p></div></div>
   <div class="timebar">
     <div class="calendar"><span>선조 33년</span><b id="day">첫째 날</b></div>
     <div class="hour"><span data-icon="sun"></span><strong id="time">07:00</strong></div>
@@ -22,13 +22,15 @@
 </header>
 <main>
   <div class="atlas">
-    <section class="map-shell" aria-label="운종가 실시간 지도">
+    <section class="map-shell" aria-label="한성과 양주 실시간 지도">
       <div id="world">
-        <div id="scene" aria-label="한성의 거리와 인물"></div>
-        <div class="map-plate"><span class="map-region">漢城府</span><strong>운종가</strong></div>
+        <div id="scene" aria-label="한성과 양주의 거리와 인물"></div>
+        <div class="map-plate"><span class="map-region" id="district-seal">漢城府</span><strong id="district-name">운종가</strong></div>
         <div id="pause-badge" hidden>시간이 멈췄습니다</div>
         <div class="camera" id="camera-tools" aria-label="지도 보기 조정">
-          <button type="button" data-camera="reset" title="지도 전체 보기" aria-label="지도 전체 보기"><span data-icon="frame"></span></button>
+          <button type="button" data-view="home" class="view-place" aria-label="한성 보기">한성</button>
+          <button type="button" data-view="yangju" class="view-place" aria-label="양주 보기">양주</button>
+          <button type="button" data-camera="reset" title="기본 시점으로 복귀" aria-label="기본 시점으로 복귀"><span data-icon="frame"></span></button>
           <button type="button" data-camera="left" title="왼쪽으로 회전" aria-label="왼쪽으로 회전"><span data-icon="rotateLeft"></span></button>
           <button type="button" data-camera="right" title="오른쪽으로 회전" aria-label="오른쪽으로 회전"><span data-icon="rotateRight"></span></button>
           <button type="button" data-camera="zoomIn" title="확대" aria-label="지도 확대"><span data-icon="plus"></span></button>
@@ -64,7 +66,7 @@
     <button type="button" id="camera-open" aria-label="시점 조절" aria-expanded="false" aria-controls="camera-tools"><span data-icon="frame"></span><span>시점</span></button>
     <button type="button" data-pocket="help" aria-label="도움말 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="book"></span><span>도움</span></button>
   </nav>
-  <div class="footnote"><span><span data-icon="pointer"></span> <span id="map-hint">인물을 선택하고 길이나 건물을 눌러 이동하세요.</span></span><span id="save-state"></span></div>
+  <div class="footnote"><span><span data-icon="pointer"></span> <span id="map-hint">인물을 선택하고 길이나 건물을 눌러 이동하세요.</span></span><button id="ledger-open" type="button" aria-controls="book-dialog">재고 장부</button><span id="save-state"></span></div>
 </main>
 <dialog id="book-dialog" aria-labelledby="dialog-title"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" id="close" aria-label="닫기"><span data-icon="close"></span></button></div><div id="dialog-content"></div></dialog>
 <script type="module" src="./app.js"></script>

@@ -248,3 +248,8 @@ dialog::backdrop {background:#16332ac2}
   .identity h2{font-size:16px}#active-portrait{width:28px;height:28px}
   .world-toast {padding:5px 9px;font-size:11px}.camera button {width:29px;height:29px}
 }
+
+.camera .view-place {width:auto;min-width:38px;padding-inline:7px;font:700 12px var(--serif)}
+.camera .view-place[aria-pressed=true] {background:#50694f;color:#ffe5a9}
+
+#ledger-open {color:var(--pine);background:none;border:1px solid var(--line);border-radius:2px;padding:3px 7px;font:inherit;cursor:pointer}
