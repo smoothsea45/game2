@@ -1,17 +1,10 @@
 import * as T from './vendor/three.module.js';
 import {village} from './landscape.js';
-import {yangjuPlot,plotAppearance} from './road-map.js';
+import {plotAppearance} from './road-map.js';
+import {places,yangjuPlot} from './world.mjs';
 import {makePerson} from './characters.js';
-import {places,people} from './simulation.mjs';
+import {people} from './simulation.mjs';
 
-const roofs = {
-  home:{x:4.9,z:-5.15,w:4.8,d:7},
-  workshop:{x:-20.8,z:-5,w:5,d:6.8},
-  market:{x:21.3,z:4.5,w:4.9,d:7.8},
-  rival:{x:-21,z:5,w:5,d:6.4},
-  yangju:{x:85,z:5.7,w:5.2,d:7.1},
-  plot:{...yangjuPlot,h:.86}
-};
 const labelStyles = {
   position:'absolute',whiteSpace:'nowrap',display:'block',margin:'0',padding:'3px 6px',
   border:'1px solid #b5a582',borderRadius:'3px',background:'#fff7dfed',color:'#353b31',
@@ -28,7 +21,7 @@ export function createScene(container,{onPick,onPan}={}) {
   renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.6));
   const canvas=renderer.domElement;
-  canvas.setAttribute('aria-label','한성과 양주를 잇는 3D 거리. 인물과 건물을 선택하거나 길을 눌러 이동할 수 있습니다.');
+  canvas.setAttribute('aria-label','한성과 양주를 잇는 3D 거리. 인물을 선택하고 건물을 눌러 살펴볼 수 있습니다.');
   Object.assign(canvas.style,{display:'block',width:'100%',height:'100%',touchAction:'none',cursor:'grab'});
   container.appendChild(canvas);
   const scene=new T.Scene();
@@ -74,7 +67,7 @@ export function createScene(container,{onPick,onPan}={}) {
   const signs={};
   for(const [id,p] of Object.entries(places)){
     const node=document.createElement('button');node.type='button';node.textContent=p.name;
-    node.setAttribute('aria-label',p.name+' 이동');Object.assign(node.style,labelStyles);
+    node.setAttribute('aria-label',p.name+' 살펴보기');Object.assign(node.style,labelStyles);
     node.addEventListener('click',e=>{e.stopPropagation();onPick?.({type:'place',id,x:p.x,z:p.z},0);});
     node.addEventListener('contextmenu',e=>{e.preventDefault();onPick?.({type:'place',id,x:p.x,z:p.z},2);});
     labels.appendChild(node);
@@ -86,8 +79,11 @@ export function createScene(container,{onPick,onPan}={}) {
 
   const target=new T.Vector3(0,0,-.5),screen=new T.Vector3(),hitPoint=new T.Vector3(),pointer=new T.Vector2();
   const cast=new T.Raycaster(),ground=new T.Plane(new T.Vector3(0,1,0),0);
-  const rayBoxes=Object.entries(roofs).filter(([id])=>places[id]).map(([id,{x,z,w,d,h=3.8}])=>[id,new T.Box3(
+  const rayBoxes=Object.entries(places).map(([id,{footprint:{x,z,w,d,h}}])=>[id,new T.Box3(
     new T.Vector3(x-w/2,0,z-d/2),new T.Vector3(x+w/2,h,z+d/2))]);
+  rayBoxes.push(['plot',new T.Box3(
+    new T.Vector3(yangjuPlot.signX-1.15,1.18,yangjuPlot.signZ-.15),
+    new T.Vector3(yangjuPlot.signX+.10,2.32,yangjuPlot.signZ+.16))]);
   let width=1,height=1,zoomLevel=1,angle=.30,frustum=35,currentActors=[],selected=null;
   let hideActorLabel=false,lastDeed,lastMeeting=false;
   let inertialFrame=false,previousFollow=null;
@@ -155,7 +151,7 @@ export function createScene(container,{onPick,onPan}={}) {
     for(const [id,{node}] of Object.entries(signs)){
       // At phone overview scale, leave the rival roof pickable without its extra placard.
       if(id==='rival'&&height<520&&zoomLevel<1.18){node.style.visibility='hidden';continue;}
-      const {x,z}=roofs[id]??places[id];
+      const {x,z}=places[id].footprint;
       positionLabel(node,projected(x,id==='plot'?2.60:4.25,z),node.textContent.length*11+14,occupied,false);
     }
   }
@@ -236,7 +232,7 @@ export function createScene(container,{onPick,onPan}={}) {
     if(meetingAvailable!==lastMeeting){
       const node=signs.market.node;
       node.textContent=places.market.name+(meetingAvailable?' · 서책상 면담':'');
-      node.setAttribute('aria-label',node.textContent+' 이동');
+      node.setAttribute('aria-label',node.textContent+' 살펴보기');
       node.style.background=meetingAvailable?'#455773':labelStyles.background;
       node.style.color=meetingAvailable?'#fff8e7':labelStyles.color;
       lastMeeting=meetingAvailable;
@@ -245,7 +241,7 @@ export function createScene(container,{onPick,onPan}={}) {
       const deed=plotAppearance(plotOwner),node=signs.plot.node;
       flag.material.color.set(deed.cloth);
       node.textContent=places.plot.name+' · '+deed.state;
-      node.setAttribute('aria-label',node.textContent+' 이동');
+      node.setAttribute('aria-label',node.textContent+' 살펴보기');
       node.style.borderColor=deed.ink;node.style.color=deed.ink;
       lastDeed=plotOwner;
     }

@@ -268,3 +268,26 @@ dialog::backdrop {background:#16332ac2}
 .schedule-window [data-schedule=startOpportunity] {background:var(--pine);color:#f9f0d5}
 .schedule-window details {border-top:1px solid var(--line);padding-top:7px;color:#566451;font-size:12px}
 .schedule-window .schedule-outcome:empty {display:none}
+
+.place-panel .place-owner {color:var(--pine);font:700 13px var(--serif);margin:0 0 6px}
+.place-section {margin-top:9px;padding-top:7px;border-top:1px solid var(--line)}
+.place-section h3 {margin:0 0 5px;font:700 14px var(--serif);color:var(--pine)}
+.place-bins,.place-bins dd,.place-people {margin:0}
+.place-bins div {display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:3px 0}
+.place-bins dt,.place-section p,.place-revenue,.place-people li {font-size:12px}
+.place-bins dd {white-space:nowrap;color:var(--pine);font:700 13px var(--serif)}
+.place-people {list-style:none;padding:0}
+.place-actions {margin-top:10px;display:flex;flex-wrap:wrap;gap:5px}
+.place-actions button {min-height:32px;padding:4px 9px;border:1px solid #8c967b;border-radius:2px;background:#edf0df;color:#294637;font:700 12px var(--serif)}
+.place-actions button:disabled {opacity:.65}
+.place-actions [data-place-order=move]:enabled {background:var(--pine);color:#fbefd3}
+
+#save-notice {
+  position: fixed; z-index: 12;
+  top: max(58px, calc(env(safe-area-inset-top) + 48px)); left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; width: max-content; max-width: 90vw;
+  border: 1px solid #bfa470; border-radius: 3px; background: #243b32; color: #fff5dd;
+  padding: 6px 9px; font-size: 12px; line-height: 1.5;
+}
+#save-notice[hidden] {display: none}
+#save-notice button {flex: none; min-height: 32px; padding: 4px 7px; border: 1px solid #bfa470; color: inherit; background: transparent}

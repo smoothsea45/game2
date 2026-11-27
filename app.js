@@ -1,8 +1,10 @@
+import {browserSaveLock, familySlot, openFamilyStore} from './persistence.mjs';
 import {makeRoadMap} from './road-map.js';
-import {places, people, fresh, tick, command, options, price, clock, loadGame, districtName, inventoryAt, workshopCommand} from './simulation.mjs';
+import {places, people, tick, command, options, price, clock, loadGame, districtName, inventoryAt, workshopCommand} from './simulation.mjs';
 
 import {renderWorkshopPanel} from './workshop-panel.js';
 import {renderSchedule} from './schedule-panel.js';
+import {renderPlacePanel} from './place-panel.js';
 
 const el = id => document.getElementById(id);
 const glyphs = {
@@ -29,23 +31,17 @@ function icon(name) {
 }
 document.querySelectorAll('[data-icon]').forEach(node => node.replaceWith(icon(node.dataset.icon)));
 
-const previousKey='hanseong-garok-realtime-v2', saveKey='hanseong-garok-realtime-v3';
-const viewKey=saveKey+'-view', checkpointKey=saveKey+'-appointment';
-let checkpoint=null, mainSession=null;
-let game, savedView;
-try {
-  game=loadGame(localStorage.getItem(saveKey)) || loadGame(localStorage.getItem(previousKey)) || loadGame(localStorage.getItem('hanseong-garok-realtime-v1'));
-  savedView=JSON.parse(localStorage.getItem(viewKey)||localStorage.getItem(previousKey+'-view'));
-  checkpoint=localStorage.getItem(checkpointKey);
-} catch {}
-game ||= fresh();
+const familyStore = openFamilyStore(() => globalThis.localStorage, browserSaveLock());
+let {game, view:savedView, checkpoint} = familyStore.loaded;
+let saveBlocked = familyStore.frozen;
+let saveNotice = '', mainSession = null;
 let selected=Object.hasOwn(people,savedView?.selected)?savedView.selected:'apprentice';
 let following=Object.hasOwn(people,savedView?.following)?savedView.following:null;
 let lastSpeed=game.speed||1, visual, toastTimer;
 const landscape=matchMedia('(orientation: landscape)');
 const card=el('command-card'),dialog=el('book-dialog');
 const pocketButtons=[...document.querySelectorAll('[data-pocket]')];
-let openPocket=null,pocketSignature='',portraitId=null;
+let openPocket=null,pocketSignature='',portraitId=null, inspectedPlace=null;
 const actor = id => game.agents.find(a => a.id===id);
 const rosterNodes = {}, resourceValues = {}, actionNodes = new Map();
 const portrait = {master:'head',apprentice:'apprentice',porter:'porter',rival:'rival'};
@@ -75,24 +71,57 @@ function notify(text,error=false){
   el('toast').textContent=text;el('toast').classList.toggle('error',error);el('toast').hidden=false;
   clearTimeout(toastTimer);toastTimer=setTimeout(()=>el('toast').hidden=true,3000);
 }
-function persist(){
-  if(mainSession)return;
-  try {
-    localStorage.setItem(saveKey,JSON.stringify(game));
-    if(visual) localStorage.setItem(viewKey,JSON.stringify({selected,following,place:(visual.getFocusX?.()??0)>50?'yangju':'home'}));
-    el('save-state').textContent='이 기기에 자동 저장';
-  }
-  catch {el('save-state').textContent='저장 공간을 사용할 수 없습니다';}
+function showSaveNotice(kind, message, reload = false) {
+  if (saveNotice === kind) return;
+  saveNotice = kind;
+  const notice = el('save-notice'), button = el('save-notice-action');
+  el('save-notice-text').textContent = message;
+  notice.hidden = false;
+  button.textContent = reload ? '최신 기록 열기' : '닫기';
+  button.onclick = reload ? () => window.location.reload() : () => { notice.hidden = true; };
 }
+function hasSaveConflict() {
+  if (!saveBlocked && familyStore.stale()) stopStaleTab();
+  return saveBlocked;
+}
+function stopStaleTab() {
+  if (saveBlocked) return;
+  saveBlocked = true;
+  if (dialog.open) dismissBook();
+  dismissCard();
+  el('save-state').textContent = '다른 탭의 저장 기록이 있습니다';
+  showSaveNotice('conflict', '다른 탭에 새 기록이 있어 이 탭을 일시정지했습니다.', true);
+}
+function persist(){
+  if(mainSession || hasSaveConflict())return;
+  const view = visual ? {selected, following, place:(visual.getFocusX?.()??0)>50?'yangju':'home'} : savedView;
+  familyStore.save(game, view, checkpoint).then(result => {
+    if (result === 'conflict') { stopStaleTab(); return; }
+    if (saveBlocked || result === 'blocked') return;
+    if (result === 'invalid') {
+      el('save-state').textContent = '이전 기록이 보존되었습니다';
+      showSaveNotice('invalid', '현재 상태를 저장하지 못했습니다. 마지막 정상 저장본을 보존했습니다.');
+    } else if (result === 'unavailable') {
+      el('save-state').textContent = '저장 공간을 사용할 수 없습니다';
+      showSaveNotice('unavailable', '진행 상황을 저장하지 못했습니다. 브라우저 저장 공간을 확인해 주세요.');
+    } else {
+      el('save-state').textContent = '이 기기에 자동 저장';
+      if (saveNotice === 'unavailable' || saveNotice === 'invalid') {
+        saveNotice = ''; el('save-notice').hidden = true;
+      }
+    }
+  });
+}
+window.addEventListener('storage', event => {
+  if (event.key === familySlot || event.key === null) hasSaveConflict();
+});
 function issue(id,target,person=selected){
+  if (hasSaveConflict()) return;
   const before=id==='startOpportunity'&&!mainSession?JSON.stringify(game):null;
   const result=command(game,person,id,target);
   notify(people[person].name+' · '+result.message,!result.ok);
   if(result.ok){
-    if(before){
-      checkpoint=before;
-      try {localStorage.setItem(checkpointKey,checkpoint);} catch {}
-    }
+    if(before)checkpoint=before;
     if(id==='move'&&typeof target==='string'&&Math.abs(actor(person).x-places[target].x)>40) following=person;
     persist();dismissCard();
     if(id==='startOpportunity'&&openPocket!=='goal')openBook('goal');
@@ -100,11 +129,13 @@ function issue(id,target,person=selected){
   renderHUD();
 }
 function manageWorkshop(action,amount){
+  if (hasSaveConflict()) return;
   const r=workshopCommand(game,action,amount);
   if(r.ok)persist();
   notify(r.message,!r.ok);renderHUD();
 }
 function scheduleAction(action){
+  if (hasSaveConflict()) return;
   if(action==='return'&&mainSession){
     ({game,selected,following}=mainSession);
     const place=mainSession.place;mainSession=null;
@@ -181,8 +212,18 @@ el('camera-open').onclick=()=>{
 };
 function pick(hit,button){
   if(!hit)return;
-  if(landscape.matches&&openPocket){dismissBook();if(hit.type!=='actor')return;}
   setCameraMenu(false);
+  if(hit.type==='place'&&button!==2){
+    const same=openPocket==='place'&&inspectedPlace===hit.id;
+    inspectedPlace=hit.id;
+    if(same||openPocket!=='place')openBook('place');
+    else renderPocket();
+    return;
+  }
+  if(landscape.matches&&openPocket){
+    dismissBook();
+    if(hit.type==='ground'&&button!==2)return;
+  }
   if(hit.type==='actor'&&button!==2){selectPerson(hit.id);return;}
   if(hit.type==='place')issue('move',hit.id);
   else if(Number.isFinite(hit.x)&&Number.isFinite(hit.z))issue('move',{x:hit.x,z:hit.z});
@@ -194,6 +235,7 @@ el('follow').onclick=()=>{
   renderHUD();
 };
 function setSpeed(n){
+  if (hasSaveConflict()) return;
   if(n>0)lastSpeed=n;
   game.speed=n;renderHUD();persist();
 }
@@ -283,6 +325,14 @@ function renderHUD(){
 }
 function renderPocket(){
   const which=openPocket,content=el('dialog-content');
+  if(which==='place'){
+    el('dialog-title').textContent=places[inspectedPlace].name;
+    renderPlacePanel(content,game,inspectedPlace,selected,order=>{
+      if(order==='workshop'||order==='goal'){openBook(order);return;}
+      if(order==='move'){dismissBook();issue('move',inspectedPlace);return;}
+      issue(order);
+    });return;
+  }
   if(which==='workshop'){
     el('dialog-title').textContent='공방 운영';
     renderWorkshopPanel(content,game,manageWorkshop);return;
@@ -321,7 +371,7 @@ function renderPocket(){
     el('dialog-title').textContent='한성과 양주 오가기';
     for(const text of [
       '1600년 한성. 종로 지물전에서 가족과 일꾼을 지휘해 첫 한 짐을 팔아 보세요.',
-      '지도 위 사람이나 초상화를 눌러 인물을 선택하세요. 길이나 건물을 클릭·탭하면 그곳으로 걷습니다. 마우스 오른쪽 버튼으로도 이동할 수 있습니다.',
+      '지도 위 사람이나 초상화를 눌러 인물을 선택하세요. 건물을 누르면 소유 가문과 재고, 오고 있는 짐을 볼 수 있습니다. 보내기를 누르거나 길을 눌러 이동하세요. 마우스 오른쪽 버튼은 바로 이동입니다.',
       '분이의 한지 작업은 한 번 또는 현재 닥으로 가능한 최대 수량을 고를 수 있습니다. 한 번에 닥 1묶음을 써서 한지 4장을 뜹니다.',
       '윤서진을 종로 시전에 보내 닥을 매입하세요. 돌석에게 닥 인수·운송을 맡겨 공방에 내려놓으면 다음 생산에 쓸 수 있습니다.',
       '공방 운영에서 위임을 켜면 분이가 생산하고 돌석이 운송·대리 판매합니다. 운영 예산을 맡겨 두면 돌석이 장터에서 닥도 사 옵니다.',
@@ -367,14 +417,16 @@ document.addEventListener('keydown',e=>{
   const key=Number(e.key);if(key>=1&&key<=4)selectPerson(Object.keys(people)[key-1]);
 });
 
-renderHUD();persist();
+renderHUD();
+if (familyStore.recovery) showSaveNotice('recovery', familyStore.recovery, saveBlocked);
+persist();
 try {
   const {createScene}=await import('./scene.js');
   visual=createScene(el('scene'),{onPick:pick,onPan:()=>{if(following){following=null;renderHUD();}}});
 } catch(err) {
   console.warn('3D 장면 초기화 실패',err);
   visual=makeRoadMap(el('scene'),pick,()=>{following=null;});
-  el('map-hint').textContent='이 기기에서는 평면 지도로 표시합니다. 인물을 선택하고 목적지를 눌러 주세요.';
+  el('map-hint').textContent='이 기기에서는 평면 지도로 표시합니다. 건물을 눌러 살피거나 길을 눌러 이동하세요.';
   notify('3D 화면을 열 수 없어 평면 지도로 시작합니다.');
 }
 if(savedView?.place==='yangju'&&!following)visual.focusPlace?.('yangju');
@@ -385,8 +437,8 @@ let previous=0,lastHUD=0,lastSave=0;
 function frame(now){
   if(!document.hidden){
     const dt=previous?Math.min((now-previous)/1000,.25):0;
-    tick(game,dt*game.speed);
-    visual.render({actors:game.agents,selectedId:selected,followId:following,seconds:game.time,paused:!game.speed,meetingAvailable:game.opportunity.startedAt!==null&&!game.opportunity.closed&&!game.opportunity.met,plotOwner:game.opportunity.landOwner==='master'?'player':game.opportunity.landOwner,hideActorLabel:landscape.matches&&card.classList.contains('open')});
+    if (!saveBlocked) tick(game,dt*game.speed);
+    visual.render({actors:game.agents,selectedId:selected,followId:following,seconds:game.time,paused:!game.speed,meetingAvailable:game.opportunity.startedAt!==null&&!game.opportunity.closed&&!game.opportunity.met,plotOwner:game.properties.plot.owner,hideActorLabel:landscape.matches&&card.classList.contains('open')});
     positionCard();
     if(now-lastHUD>200){renderHUD();lastHUD=now;}
     if(now-lastSave>3500){persist();lastSave=now;}

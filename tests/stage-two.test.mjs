@@ -58,7 +58,7 @@ test('both real legacy saves restore an active single batch and its existing fre
     const legacy = JSON.parse(text);
     const state = loadGame(text);
     assert.ok(state, file);
-    assert.equal(state.version, 3);
+    assert.equal(state.version, 4);
     assert.equal(state.workshop.enabled, false);
     assert.equal(state.workshop.budget, 0);
     assert.equal(person(state, 'apprentice').batchesLeft, 1);

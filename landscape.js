@@ -1,8 +1,7 @@
 import * as T from './vendor/three.module.js';
 import {mergeGeometries} from './vendor/BufferGeometryUtils.js';
 import {makeHanok} from './architecture.js';
-import {roads} from './simulation.mjs';
-import {yangjuPlot} from './road-map.js';
+import {places,roads,yangjuPlot} from './world.mjs';
 
 // A single static mesh lets even the distant village share one draw call.
 export function village() {
@@ -129,9 +128,15 @@ export function village() {
     }
   }
   // Main properties are entered from open forecourts. Roofs sit to the side of each door.
+  function drawProperty(place,yardWidth=place.footprint.w+.84,yardDepth=place.footprint.d+.4) {
+    const {x,z,width,depth,type,rotation}=place.model;
+    yard(x,z,yardWidth,yardDepth);
+    roofed(x,z,width,depth,type,rotation);
+  }
+  for(const place of Object.values(places)) {
+    if(place.model && place!==places.yangju)drawProperty(place);
+  }
   const quarter=[
-    [-20.8,-5,6.2,4.5,'workshop',Math.PI/2],[4.9,-5.15,6.5,4.3,'home',-Math.PI/2],
-    [21.3,4.5,7.4,4.4,'market',-Math.PI/2],[-21,5,5.7,4.5,'rival',Math.PI/2],
     [-9,-6.3,7,3.4,'cottage',0],[-6,5.25,6.5,3.3,'cottage',Math.PI],
     [9.1,5,6.4,3.2,'cottage',Math.PI],[11.7,-6.3,4.25,3.2,'cottage',0]
   ];
@@ -141,8 +146,13 @@ export function village() {
     roofed(x,z,w,d,type,yaw);
   }
   // Gate stairs and stepping stones tile the short approaches.
-  for(const [x,z,side] of [[-16,-4,-1],[0,-5,1],[16,4,1],[-16,5,-1]]) {
-    for(let i=1;i<4;i++)box(x+side*(.3+i*.54),.045,z,.43,.08,.83,'#bcb9a5');
+  for(const {x,z,model} of Object.values(places)) {
+    if(!model)continue;
+    for(let i=1;i<4;i++) {
+      const reach=.3+i*.54;
+      const step=box(x-Math.sin(model.rotation)*reach,.045,z-Math.cos(model.rotation)*reach,.83,.08,.43,'#bcb9a5');
+      step.rotation.y=model.rotation;
+    }
   }
   wall(-10.4,-8.85,9.2,.30);wall(8,-8.9,11,.3);wall(7,8.08,10,.3);
   fence(-13.6,2.15,3.8,false);fence(-12.5,-2.28,4,true);
@@ -160,8 +170,6 @@ export function village() {
     roofed(x,-16.0-random()*1.4,6+random()*1.8,3.7,'cottage',i%3===0?.12:0);
     if(i%2===0)roofed(x+2.4,-24-random()*2,5.7,3.6,'cottage',-.08);
   }
-  box(0,-.02,-12.1,88,.052,2.3,'#d1b792');
-  box(0,-.026,14.1,78,.05,2,'#d1b792');
   for(const [x,z,w,d,rot] of [[-30,5,6,4,0],[-31,-5,6,3,1.5],[31,-4,7,4,-1.2],
     [31,7,6.5,4,.10],[-29,13,7,4,0],[-19,16,7,3.5,0],[-10,17,6,3.4,.1],
     [14,17.5,6.4,3.8,.16],[29,15,6,3,.6]])roofed(x,z,w,d,'cottage',rot);
@@ -220,8 +228,7 @@ export function village() {
   for(const [x,z] of [[41,-3.2],[65,3.4],[70,-4.0],[95,6.2]])rock(x,z,.56);
   // A rural grain market. Separate barn, thatched inn, baskets and tied rice sheaves
   // contrast with the packed tiled shops in Hanseong; both approaches remain clear.
-  yard(85,5.7,7.7,8.5);
-  roofed(85,5.7,6.4,4.4,'cottage',-Math.PI/2);
+  drawProperty(places.yangju,7.7,8.5);
   yard(83.8,-6.9,8.8,5.5);
   roofed(83.8,-7.4,6.6,3.8,'cottage');
   roofed(93.4,1.4,5.4,3.5,'cottage',-.10);
@@ -238,9 +245,10 @@ export function village() {
     const x=left+1+row*.72;
     box(x,.073,back+2,.16,.055,2.1,'#b39b76');
   }
-  box(right+.59,.006,-5,1.18,.024,1.40,'#d3be99');
+  const gate=places.plot;
+  box((gate.x+right)/2,.006,gate.z,gate.x-right,.024,1.40,'#d3be99');
   const corners=[[left,front],[left,back],[right,back],[right,front]];
-  const gateFront=-4.18,gateBack=-5.82;
+  const gateFront=gate.z+.82,gateBack=gate.z-.82;
   function boundary(a,b){
     const mid=[(a[0]+b[0])/2,.37,(a[1]+b[1])/2];
     stem([a[0],.59,a[1]],mid,.031,'#a58960');

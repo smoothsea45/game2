@@ -1,16 +1,16 @@
+import {plotRentPerDay, propertyView} from './estate.mjs';
+
 // One deed and one buyer appointment share registration hours on the simulation clock.
 // In that interval a walker cannot travel between the two doors (over 70 metres).
 const LEAD = 54;
 const WINDOW = 14;
 const RIVAL_SIGNING = 6;
 const LOT_PRICE = 12;
-const DAILY_RENT = 4;
-const DAY = 360;
 const CLIENT_PREMIUM = 1;
 const destination = {plot:'plot', meeting:'market'};
 
 export function freshOpportunity() {
-  return {startedAt:null, closed:false, landOwner:null, acquiredAt:null, rentDays:0,
+  return {startedAt:null, closed:false,
     met:false, queued:null, rivalPurse:18, rivalResume:null, rivalReadyAt:null};
 }
 const isTime = n => Number.isFinite(n) && n >= 0;
@@ -26,12 +26,13 @@ function phase(s) {
 export function clientBonus(s) {return s.opportunity?.met ? CLIENT_PREMIUM : 0;}
 export function opportunityView(s) {
   const o=s.opportunity, state=phase(s), started=o.startedAt!==null;
+  const plot=propertyView(s,'plot');
   return {phase:state,opensAt:started?opens(o):null,closesAt:started?closes(o):null,
     secondsUntilOpen:started?Math.max(0,opens(o)-s.time):LEAD,
     secondsLeft:started?Math.max(0,closes(o)-s.time):LEAD+WINDOW,
-    landOwner:o.landOwner,met:o.met,queued:o.queued,landPrice:LOT_PRICE,
-    relationshipBonus:CLIENT_PREMIUM,rentPerDay:DAILY_RENT,rivalPurse:o.rivalPurse,
-    nextRentAt:o.acquiredAt===null?null:o.acquiredAt+(o.rentDays+1)*DAY};
+    landOwner:plot.owner==='player'?'master':plot.owner,met:o.met,queued:o.queued,landPrice:LOT_PRICE,
+    relationshipBonus:CLIENT_PREMIUM,rentPerDay:plot.rentPerDay,rivalPurse:o.rivalPurse,
+    nextRentAt:plot.nextRentAt};
 }
 function validResume(a,r) {
   const inDetour=['rivalPlotTravel','rivalPlotWait','rivalPlotBack'].includes(a.task);
@@ -41,18 +42,16 @@ function validResume(a,r) {
     && (a.task!=='rivalPlotBack'||r.task==='rivalWork');
 }
 export function validOpportunity(s) {
-  const o=s.opportunity, rival=s.agents.find(a=>a.id==='rival');
-  if (!o||!rival||!isCount(o.rivalPurse)||!isCount(o.rentDays)
+  const o=s.opportunity, rival=s.agents.find(a=>a.id==='rival'), deed=s.properties.plot;
+  if (!o||!rival||!isCount(o.rivalPurse)||['landOwner','acquiredAt','rentDays'].some(key=>Object.hasOwn(o,key))
     || typeof o.met!=='boolean'||typeof o.closed!=='boolean'
-    || ![null,'rival','master'].includes(o.landOwner)||![null,'plot','meeting'].includes(o.queued)
+    || ![null,'plot','meeting'].includes(o.queued)
     || !validResume(rival,o.rivalResume))return false;
-  if(o.startedAt===null)return !o.closed&&o.landOwner===null&&o.acquiredAt===null&&!o.met
-    &&o.rentDays===0&&o.queued===null&&o.rivalResume===null&&o.rivalReadyAt===null;
+  if(o.startedAt===null)return !o.closed&&deed.owner===null&&!o.met
+    &&o.queued===null&&o.rivalResume===null&&o.rivalReadyAt===null;
   if(!isTime(o.startedAt)||o.startedAt>s.time)return false;
-  if(o.landOwner===null){if(o.acquiredAt!==null||o.rentDays!==0)return false;}
-  else if(!isTime(o.acquiredAt)||o.acquiredAt<opens(o)||o.acquiredAt>=closes(o)||o.acquiredAt>s.time
-    ||o.rentDays>Math.floor((s.time-o.acquiredAt)/DAY))return false;
-  if(o.met&&(o.landOwner==='master'||s.time<opens(o)))return false;
+  if(deed.owner && (deed.acquiredAt<opens(o)||deed.acquiredAt>=closes(o)))return false;
+  if(o.met&&(deed.owner==='player'||s.time<opens(o)))return false;
   if(o.closed&&(s.time<closes(o)||o.queued!==null))return false;
   if(rival.task==='rivalPlotWait')return isTime(o.rivalReadyAt)&&rival.at==='plot';
   return o.rivalReadyAt===null;
@@ -60,7 +59,7 @@ export function validOpportunity(s) {
 function parked(a,where){return a.task==='idle'&&a.at===where;}
 function canRegister(s,a,kind){
   const o=s.opportunity;
-  return parked(a,destination[kind]) && (kind==='plot'?o.landOwner===null&&s.grain>=LOT_PRICE:!o.met);
+  return parked(a,destination[kind]) && (kind==='plot'?s.properties.plot.owner===null&&s.grain>=LOT_PRICE:!o.met);
 }
 export function opportunityOptions(s,a){
   if(a.id!=='master')return [];
@@ -68,21 +67,25 @@ export function opportunityOptions(s,a){
   if(p==='ready')return [{id:'startOpportunity',label:'두 약속의 초대장 열기',detail:'양주 빈터 매입과 한성 거래처 면담을 같은 시각에 잡습니다.',enabled:true}];
   if(p==='closed')return [];
   const choices=[];
-  if(o.landOwner===null)choices.push({id:'claimPlot',label:p==='waiting'?'빈터 매입 대기':'빈터 매입',
-    detail:'양주 빈터 현장 · 곡식 '+LOT_PRICE+'말 · 보유 하루당 사용료 '+DAILY_RENT+'말',enabled:o.queued!=='plot'&&canRegister(s,a,'plot')});
+  if(s.properties.plot.owner===null)choices.push({id:'claimPlot',label:p==='waiting'?'빈터 매입 대기':'빈터 매입',
+    detail:'양주 빈터 현장 · 곡식 '+LOT_PRICE+'말 · 보유 하루당 사용료 '+plotRentPerDay+'말',enabled:o.queued!=='plot'&&canRegister(s,a,'plot')});
   if(!o.met)choices.push({id:'meetClient',label:p==='waiting'?'거래처 면담 대기':'거래처 면담',
     detail:'종로 시전 현장 · 이후 한성 한지 판매 시 장당 '+CLIENT_PREMIUM+'말 추가',enabled:o.queued!=='meeting'&&canRegister(s,a,'meeting')});
   return choices;
 }
 function buyLot(s,buyer,note){
-  const o=s.opportunity, wallet=buyer==='master'?s:o, purse=buyer==='master'?'grain':'rivalPurse';
-  if(o.landOwner!==null||wallet[purse]<LOT_PRICE)return false;
-  wallet[purse]-=LOT_PRICE;o.landOwner=buyer;o.acquiredAt=s.time;
-  note(s,(buyer==='master'?'윤서진':'박만길')+'이 양주 현장에서 곡식 '+LOT_PRICE+'말을 치르고 빈터 문서를 받았다.');
+  const plot = s.properties.plot;
+  const wallet = buyer==='player' ? s : s.opportunity;
+  const purse = buyer==='player' ? 'grain' : 'rivalPurse';
+  if(plot.owner!==null||wallet[purse]<LOT_PRICE)return false;
+  wallet[purse]-=LOT_PRICE;
+  plot.owner=buyer;
+  plot.acquiredAt=s.time;
+  note(s,(buyer==='player'?'윤서진이 윤 가문':'박만길이 박 가문')+' 명의로 양주 빈터 문서를 받았다. 매입 대금 '+LOT_PRICE+'말.');
   return true;
 }
 function confirm(s,kind,note){
-  if(kind==='plot')return buyLot(s,'master',note);
+  if(kind==='plot')return buyLot(s,'player',note);
   s.opportunity.met=true;
   note(s,'윤서진이 종로에서 단골 서책상과 납품 약속을 맺었다. 한지 한 장마다 곡식 1말을 더 받는다.');
   return true;
@@ -147,22 +150,14 @@ export function opportunityTick(s,delta,hooks){
     const p=phase(s);
     if(p==='open'){
       if(o.queued){confirm(s,o.queued,hooks.note);o.queued=null;}
-      if(!o.landOwner&&r.task==='rivalPlotWait'&&r.at==='plot'&&s.time>=o.rivalReadyAt)
+      if(!s.properties.plot.owner&&r.task==='rivalPlotWait'&&r.at==='plot'&&s.time>=o.rivalReadyAt)
         buyLot(s,'rival',hooks.note);
     }
-    if(o.landOwner||p==='closed')resumeRival(s,r,hooks);
+    if(s.properties.plot.owner||p==='closed')resumeRival(s,r,hooks);
     if(p==='closed'){
       o.closed=true;o.queued=null;
       if(!o.met)hooks.note(s,'한성 서책상의 면담 시간이 끝났다.');
-      if(!o.landOwner)hooks.note(s,'양주 빈터의 매입 접수가 끝났다. 이번에는 주인이 정해지지 않았다.');
-    }
-  }
-  if(o.landOwner){
-    const days=Math.floor((s.time-o.acquiredAt)/DAY);
-    if(days>o.rentDays){
-      const rent=(days-o.rentDays)*DAILY_RENT;o.rentDays=days;
-      if(o.landOwner==='master')s.grain+=rent;else o.rivalPurse+=rent;
-      hooks.note(s,(o.landOwner==='master'?'윤서진':'박만길')+'의 양주 빈터에 짐을 부린 객주가 사용료 '+rent+'말을 치렀다.');
+      if(!s.properties.plot.owner)hooks.note(s,'양주 빈터의 매입 접수가 끝났다. 이번에는 주인이 정해지지 않았다.');
     }
   }
 }

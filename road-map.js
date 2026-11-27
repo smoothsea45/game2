@@ -1,7 +1,6 @@
-import {places,roads} from './simulation.mjs';
+import {places,roads,placeAtGround,yangjuPlot} from './world.mjs';
+export {yangjuPlot} from './world.mjs';
 
-// The plot and its street door are separate: the road endpoint stays navigable.
-export const yangjuPlot = {x:75.1,z:-6.7,w:5.1,d:6.7,signX:77.5,signZ:-6.3};
 const titleDeed = {
   vacant:{state:'매물',cloth:'#bd9140',ink:'#705718'},
   player:{state:'우리 가문',cloth:'#378473',ink:'#235a4e'},
@@ -15,7 +14,7 @@ export function plotAppearance(owner){
 export function makeRoadMap(mount,pick,onPan){
   mount.replaceChildren();
   const canvas=document.createElement('canvas');mount.append(canvas);
-  canvas.setAttribute('aria-label','한성 · 양주 길 지도. 드래그하여 둘러보고 인물과 장터를 선택하세요.');
+  canvas.setAttribute('aria-label','한성 · 양주 길 지도. 드래그하여 둘러보고 인물을 선택하거나 건물을 눌러 살펴보세요.');
   canvas.style.touchAction='none';
   const ctx=canvas.getContext('2d');
   if(!ctx)return {render(){},projectActor(){return null;},focusPlace(){},getFocusX(){return 0;},zoom(){},rotate(){},reset(){}};
@@ -40,11 +39,16 @@ export function makeRoadMap(mount,pick,onPan){
     }
     ctx.fillStyle=deed.cloth;ctx.beginPath();ctx.moveTo(parcel.signX,parcel.signZ);
     ctx.lineTo(parcel.signX-1.35,parcel.signZ+.36);ctx.lineTo(parcel.signX,parcel.signZ+.76);ctx.fill();
-    for(const [x,z,w,d,rural] of [
-      [-21,-5,4.4,6.2,false],[5,-5,4.3,6.5,false],[21,4.5,4.5,7,false],[-21,5,4.5,6,false],
+    for(const place of Object.values(places)) {
+      if(!place.model)continue;
+      const {x,z,w,d}=place.footprint;
+      roof(x,z,w,d,place.model.type==='cottage');
+    }
+    for(const house of [
       [-9,-6,6,3,false],[-6,5,6,3,false],[8,5,6,3,false],[31,-5,5,3,false],
-      [85,5.7,4.4,6.4,true],[84,-7.4,6.6,3.8,true],[93,1.4,5.4,3.5,true]
-    ]){
+      [84,-7.4,6.6,3.8,true],[93,1.4,5.4,3.5,true]
+    ])roof(...house);
+    function roof(x,z,w,d,rural){
       const l=x-w/2,t=z-d/2;
       ctx.fillStyle=rural?'#b6a077':'#85988a';ctx.fillRect(l,t,w,d);
       ctx.strokeStyle=rural?'#917b5d':'#62796f';ctx.lineWidth=.16;ctx.strokeRect(l,t,w,d);
@@ -72,7 +76,7 @@ export function makeRoadMap(mount,pick,onPan){
       let title=p.name;
       if(parcel)title+=' · '+deed.state;
       if(meeting)title+=' · 서책상 면담';
-      const pos=project(parcel?yangjuPlot:p),dir=p.z<0?-1:1,cy=pos.y+dir*25;
+      const pos=project(p.footprint),dir=p.z<0?-1:1,cy=pos.y+dir*25;
       ctx.font='bold 12px serif';const width=ctx.measureText(title).width+14;
       ctx.fillStyle=meeting?'#455773':'#f8f2de';ctx.fillRect(pos.x-width/2,cy-10,width,20);ctx.strokeStyle=parcel?deed.ink:'#676f58';ctx.lineWidth=1;ctx.strokeRect(pos.x-width/2,cy-10,width,20);
       ctx.fillStyle=meeting?'#fff8e7':parcel?deed.ink:'#2d4235';ctx.textAlign='center';ctx.fillText(title,pos.x,cy+4);
@@ -90,9 +94,8 @@ export function makeRoadMap(mount,pick,onPan){
     if(hit){pick(hit,e.button);return;}
     const {w,h,cx,sx,scale}=transform,dx=(x-w/2)/scale,dy=(y-h/2)/scale;
     const ground={x:focus.x+cx*dx+sx*dy,z:focus.z-sx*dx+cx*dy};
-    if(places.plot && Math.abs(ground.x-yangjuPlot.x)<=yangjuPlot.w/2 && Math.abs(ground.z-yangjuPlot.z)<=yangjuPlot.d/2){
-      pick({type:'place',id:'plot',x:places.plot.x,z:places.plot.z},e.button);return;
-    }
+    const id=placeAtGround(ground);
+    if(id){pick({type:'place',id,x:places[id].x,z:places[id].z},e.button);return;}
     pick({type:'ground',...ground},e.button);
   }
   let drag=null;

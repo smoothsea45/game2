@@ -37,6 +37,7 @@
           <button type="button" data-camera="zoomIn" title="확대" aria-label="지도 확대"><span data-icon="plus"></span></button>
           <button type="button" data-camera="zoomOut" title="축소" aria-label="지도 축소"><span data-icon="minus"></span></button>
         </div>
+        <div id="save-notice" role="status" hidden><span id="save-notice-text"></span><button type="button" id="save-notice-action">닫기</button></div>
         <div class="world-toast" role="status" aria-live="polite" id="toast" hidden></div>
       </div>
       <button id="journal-open" class="news" type="button" aria-label="가문 일지 열기"><span class="news-label"><span data-icon="feather"></span>가문 일지</span><time id="news-time"></time><span id="news-text">한성의 아침이 밝았습니다.</span><span data-icon="arrowRight"></span></button>
@@ -69,7 +70,7 @@
     <button type="button" id="camera-open" aria-label="시점 조절" aria-expanded="false" aria-controls="camera-tools"><span data-icon="frame"></span><span>시점</span></button>
     <button type="button" data-pocket="help" aria-label="도움말 열기" aria-expanded="false" aria-controls="book-dialog"><span data-icon="book"></span><span>도움</span></button>
   </nav>
-  <div class="footnote"><span><span data-icon="pointer"></span> <span id="map-hint">인물을 선택하고 길이나 건물을 눌러 이동하세요.</span></span><button id="ledger-open" type="button" aria-controls="book-dialog">재고 장부</button><span id="save-state"></span></div>
+  <div class="footnote"><span><span data-icon="pointer"></span> <span id="map-hint">건물을 누르면 현장을 살피고, 길을 누르면 이동합니다.</span></span><button id="ledger-open" type="button" aria-controls="book-dialog">재고 장부</button><span id="save-state"></span></div>
 </main>
 <dialog id="book-dialog" aria-labelledby="dialog-title"><div class="dialog-head"><h2 id="dialog-title"></h2><button type="button" id="close" aria-label="닫기"><span data-icon="close"></span></button></div><div id="dialog-content"></div></dialog>
 <script type="module" src="./app.js"></script>

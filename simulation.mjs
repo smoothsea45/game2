@@ -1,94 +1,19 @@
-import {bins, moveGoods, quantity, validInventory} from './inventory.mjs';
+import {bins, migratePlacedInventory, moveGoods, quantity, validInventory} from './inventory.mjs';
+import {freshProperties, migrateProperties, settlePlotRent, validProperties} from './estate.mjs';
 import {barkCost, barkLot, changeMandate, freshWorkshop, runMandate, validWorkshop} from './workshop.mjs';
 import {clientBonus, freshOpportunity, opportunityArrive, opportunityCommand, opportunityOptions, opportunityTick, validOpportunity} from './opportunity.mjs';
-export {inventoryAt, inventoryRows} from './inventory.mjs';
+export {holdingsAtPlace, inventoryAt, inventoryRows} from './inventory.mjs';
 export {workshopStatus} from './workshop.mjs';
 
-// Distances are metres on the ground plane. Buildings are reached at their street doors.
-const point = (x, z) => ({x, z});
-export const places = {
-  home: {name: '본가', x: 0, z: -5},
-  workshop: {name: '한지 공방', x: -16, z: -4},
-  market: {name: '종로 시전', x: 16, z: 4},
-  rival: {name: '경쟁 지물전', x: -16, z: 5},
-  yangju: {name: '양주 장터', x: 79, z: 4},
-  plot: {name: '양주 빈터', x: 79, z: -5}
-};
+import {places, finitePoint, distance, doorstep, doorAtGround, streetPoint, route, validTravel} from './world.mjs';
+export {places, roads, districtName} from './world.mjs';
 export const people = {
   master: {name: '윤서진', role: '가주'},
   apprentice: {name: '분이', role: '도제'},
   porter: {name: '돌석', role: '짐꾼'},
   rival: {name: '박만길', role: '경쟁 상인'}
 };
-export const roads = [
-  [point(-23, 0), point(23, 0)],
-  [point(-16, -10), point(16, -10)],
-  [point(-16, 9), point(16, 9)],
-  ...[-16, 0, 16].map(x => [point(x, -10), point(x, 9)]),
-  [point(23, 0), point(89, 0)],
-  [point(79, -8), point(79, 9)]
-];
-export function districtName(x) {
-  if (x <= 28) return '한성';
-  if (x < 67) return '한성·양주 사이';
-  return '양주';
-}
-const distance = (a, b) => Math.hypot(a.x-b.x, a.z-b.z);
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-function projection(p, [a, b]) {
-  const dx = b.x-a.x, dz = b.z-a.z;
-  const t = clamp(((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz),0,1);
-  return point(a.x+t*dx,a.z+t*dz);
-}
-function streetPoint(p) {
-  let best = null, least = Infinity;
-  for (const road of roads) {
-    const snapped = projection(p, road);
-    const d = distance(p, snapped);
-    if (d < least) { best = snapped; least = d; }
-  }
-  return best;
-}
-// Door offsets keep the people visible when several share a destination.
-const offsets = {master:0, apprentice:-0.8, porter:1.1, rival:-1.2};
-function doorstep(id, place) {
-  const p = places[place];
-  return point(p.x, p.z+offsets[id]);
-}
-const intersections = [
-  ...[-16,0,16].flatMap(x=>[-10,0,9].map(z=>point(x,z))),
-  point(23,0), point(79,0)
-];
-function route(from, to) {
-  const points = [point(from.x,from.z), to, ...intersections];
-  const graph = points.map(()=>[]);
-  for (const road of roads) {
-    const indices = points.map((_,i)=>i).filter(i => distance(points[i],projection(points[i],road)) < 0.001);
-    indices.sort((i,j)=>points[i].x-points[j].x || points[i].z-points[j].z);
-    for (let i=1;i<indices.length;i++) {
-      const a=indices[i-1], b=indices[i];
-      graph[a].push(b);graph[b].push(a);
-    }
-  }
-  const costs=points.map(()=>Infinity), previous=points.map(()=>-1), seen=new Set();
-  costs[0]=0;
-  while (true) {
-    let current=-1;
-    for(let i=0;i<points.length;i++) {
-      if(!seen.has(i)&&Number.isFinite(costs[i])&&(current===-1||costs[i]<costs[current]))current=i;
-    }
-    if(current<0) throw new Error('Disconnected street');
-    if(current===1) break;
-    seen.add(current);
-    for (const next of graph[current]) {
-      const total=costs[current]+distance(points[current],points[next]);
-      if(total<costs[next]) {costs[next]=total;previous[next]=current;}
-    }
-  }
-  const result=[];
-  for(let i=1;i!==0;i=previous[i])result.unshift(points[i]);
-  return result;
-}
 export function clock(s) {
   const minutes=7*60+Math.floor(s.time*4);
   const day=Math.floor(minutes/1440)+1, hour=Math.floor(minutes/60)%24, minute=minutes%60;
@@ -107,16 +32,16 @@ function wait(a,task,action,seconds=0,mode='idle') {
   Object.assign(a,{mode,task,action,path:[],target:null,remaining:seconds,duration:seconds});
 }
 function go(a,target,task,action) {
-  const isPlace=typeof target==='string';
-  const to=isPlace?doorstep(a.id,target):streetPoint(target);
-  Object.assign(a,{mode:'walk',task,action,at:null,target:isPlace?target:null,
+  const placeId=typeof target==='string'?target:doorAtGround(a.id,target);
+  const to=placeId?doorstep(a.id,placeId):streetPoint(target);
+  Object.assign(a,{mode:'walk',task,action,at:null,target:placeId,
     path:route(a,to),remaining:0,duration:0});
 }
 export function fresh(){
   const agents=[actor('master','home'),actor('apprentice','workshop'),actor('porter','home'),actor('rival','rival')];
   const rival=agents[3];
   wait(rival,'rivalWork','팔 종이를 꾸리는 중',10,'work');
-  const state={version:3,time:0,speed:1,agents,inventory:[],grain:18,sold:0,
+  const state={version:4,time:0,timeRemainder:0,speed:1,agents,inventory:[],properties:freshProperties(),grain:18,sold:0,
     crafted:0, delivered:0, rivalSales:0, contractDay:0, log:[{time:0,text:'한성의 새벽 장이 섰다. 오늘 첫 한지를 지어 내다 팔자.'}]};
   moveGoods(state,null,bins.bark,4);
   moveGoods(state,null,bins.market,4);
@@ -130,7 +55,6 @@ function initStageTwo(s) {
   const apprentice=s.agents.find(a=>a.id==='apprentice');
   apprentice.batchesLeft=hasCraftOrder(s)?1:0;
   moveGoods(s,null,bins.marketBark,12);
-  s.version=3;
 }
 const taskModes={
   idle:'idle',move:'walk',toCraft:'walk',craft:'work',toPickup:'walk',waitPaper:'idle',
@@ -142,12 +66,16 @@ const roleTasks={
   porter:['idle','move','toPickup','waitPaper','delivery','toBarkShop','toBarkPickup','barkDelivery'],
   rival:['rivalWork','rivalDeliver','rivalReturn','rivalPlotTravel','rivalPlotWait','rivalPlotBack']
 };
+// A delivery can only settle at the receiving building. A restored route and
+// its physical endpoint must agree with the order that will run on arrival.
+const taskPlaces={
+  toCraft:'workshop',craft:'workshop',toPickup:'workshop',waitPaper:'workshop',
+  delivery:'market',toBarkShop:'market',toBarkPickup:'market',barkDelivery:'workshop',
+  rivalWork:'rival',rivalDeliver:'market',rivalReturn:'rival',
+  rivalPlotTravel:'plot',rivalPlotWait:'plot',rivalPlotBack:'rival',labor:'market'
+};
 const counts=['grain','sold','crafted','delivered','rivalSales','contractDay'];
 const isCount=n=>Number.isSafeInteger(n)&&n>=0;
-const finitePoint=p=>p&&Number.isFinite(p.x)&&Number.isFinite(p.z);
-function onStreet(p) {
-  return finitePoint(p)&&distance(p,streetPoint(p))<0.001;
-}
 const aliases={bark:bins.bark,paper:bins.workshop,stock:bins.stall,supply:bins.market};
 function inventoryViews(s) {
   // Compatibility for renderers and existing simulation callers. Only the
@@ -205,24 +133,38 @@ function validOrders(s) {
 export function loadGame(text) {
   try {
     const s=JSON.parse(text);
-    if (![1,2,3].includes(s?.version)||!Number.isFinite(s.time)||s.time<0||![0,1,2,4].includes(s.speed)||
+    if (![1,2,3,4].includes(s?.version)||!Number.isFinite(s.time)||s.time<0||![0,1,2,4].includes(s.speed)||
       !counts.every(k=>isCount(s[k]))||!Array.isArray(s.agents)||s.agents.length!==4||
       !Array.isArray(s.log)||!s.log.every(v=>Number.isFinite(v.time)&&typeof v.text==='string')) return null;
-    const legacy=s.version===1;
-    if(legacy?!Object.keys(aliases).every(key=>isCount(s[key])):!validInventory(s.inventory))return null;
+    const sourceVersion=s.version;
+    const legacy=sourceVersion===1;
+    if(legacy&&!Object.keys(aliases).every(key=>isCount(s[key])))return null;
     const ids=new Set();
     for(const a of s.agents) {
-      if(!Object.hasOwn(people,a.id)||ids.has(a.id)||!onStreet(a)||!Array.isArray(a.path)||
-        !a.path.every(onStreet)||!roleTasks[a.id].includes(a.task)||taskModes[a.task]!==a.mode||
-        ![a.at,a.target].every(v=>v===null||Object.hasOwn(places,v))||typeof a.action!=='string'||
+      if(!Object.hasOwn(people,a.id)||ids.has(a.id)||!validTravel(a)||
+        !roleTasks[a.id].includes(a.task)||taskModes[a.task]!==a.mode||
+        (taskPlaces[a.task] && taskPlaces[a.task] !== (a.mode==='walk'?a.target:a.at))||
+        typeof a.action!=='string'||
         !Number.isFinite(a.remaining)||!Number.isFinite(a.duration)||a.remaining<0||a.duration<0||
         (legacy&&(!isCount(a.cargo)||(!['porter','rival'].includes(a.id)&&a.cargo!==0)))||
         !Number.isFinite(a.heading))return null;
       ids.add(a.id);
     }
+    const actorOrder=Object.keys(people);
+    s.agents.sort((a,b)=>actorOrder.indexOf(a.id)-actorOrder.indexOf(b.id));
     if(legacy)migrateInventory(s);
-    if(s.version===2)initStageTwo(s);
-    return validWorkshop(s.workshop)&&validOpportunity(s)&&validOrders(s)?inventoryViews(s):null;
+    else if(sourceVersion<4&&!migratePlacedInventory(s))return null;
+    if(sourceVersion<3){
+      initStageTwo(s);
+      s.properties=freshProperties();
+    }else if(sourceVersion===3&&!migrateProperties(s))return null;
+    if(sourceVersion<4){
+      s.timeRemainder=0;
+      s.version=4;
+    }
+    if(!Number.isFinite(s.timeRemainder)||s.timeRemainder<0||s.timeRemainder>=SIMULATION_STEP)return null;
+    return validInventory(s)&&validWorkshop(s.workshop)&&validProperties(s)&&validOpportunity(s)&&validOrders(s)
+      ?inventoryViews(s):null;
   } catch {return null;}
 }
 function available(a) {return a.task==='idle'||a.task==='move'||a.task==='waitPaper';}
@@ -347,19 +289,32 @@ function progressActor(s,a,seconds) {
     else return;
   }
 }
+const SIMULATION_STEP = 1 / 64;
+
 export function tick(s,seconds){
   if(!Number.isFinite(seconds)||seconds<=0||s.speed===0)return;
-  let left=seconds;
-  // Bounded event steps keep concurrent arrivals and market updates in chronological order at 4×.
-  while(left>0.000001){
-    const delta=Math.min(left,0.25),oldTime=s.time,oldDay=clock(s).day;left-=delta;s.time+=delta;
+  // Browser frames supply scaled seconds. Bank the partial step so a slower
+  // screen, a speed change or a reload cannot move the next settlement.
+  const accruedSteps = (s.timeRemainder + seconds) / SIMULATION_STEP;
+  const nearest = Math.round(accruedSteps);
+  const tolerance = 32 * Number.EPSILON * Math.max(1, accruedSteps);
+  const aligned = nearest > 0 && Math.abs(accruedSteps - nearest) <= tolerance
+    ? nearest : accruedSteps;
+  const steps = Math.floor(aligned);
+  s.timeRemainder = (aligned - steps) * SIMULATION_STEP;
+  for (let step = 0; step < steps; step++) {
+    const oldTime=s.time,oldDay=clock(s).day;
+    s.time+=SIMULATION_STEP;
+    // At one timestamp, market/calendar events precede appointments, then
+    // actors settle in stable roster order before the manager assigns work.
     if(Math.floor(oldTime/9)<Math.floor(s.time/9)&&s.supply>0)moveGoods(s,bins.market,null,1);
     if(clock(s).day!==oldDay){
       const arriving=Math.min(barkLot,12-quantity(s,bins.marketBark));
       if(arriving>0)moveGoods(s,null,bins.marketBark,arriving);
     }
-    opportunityTick(s,delta,opportunityActions);
-    for(const a of s.agents)progressActor(s,a,delta);
+    opportunityTick(s,SIMULATION_STEP,opportunityActions);
+    settlePlotRent(s,note);
+    for(const a of s.agents)progressActor(s,a,SIMULATION_STEP);
     runMandate(s,workshopActions);
   }
 }

@@ -63,11 +63,10 @@ export function runMandate(s, actions) {
   const porter = s.agents.find(a=>a.id==='porter');
   const pickup = quantity(s,bins.pickupBark);
   const canBuy = s.bark <= lowStock && w.budget >= barkCost && quantity(s,bins.marketBark) >= barkLot;
-  if (porter.task === 'waitPaper' && !s.paper && (pickup || canBuy)) {
-    actions.startBarkTrip(s,porter);
-    return;
-  }
-  if (porter.task !== 'idle') return;
+  // Waiting for nonexistent sheets is interruptible. In particular the stall
+  // can already hold a previous delivery that needs a seller, even with no cash.
+  const waitingForPaper = porter.task === 'waitPaper' && !s.paper;
+  if (porter.task !== 'idle' && !waitingForPaper) return;
   if (porter.cargoItem === 'paper') { actions.startPaperTrip(s,porter); return; }
   if (porter.cargoItem === 'bark') { actions.startBarkTrip(s,porter); return; }
   if (porter.at === 'market') {
